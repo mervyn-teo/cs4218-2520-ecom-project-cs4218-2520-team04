@@ -1,6 +1,8 @@
 # CS4218 Project - Virtual Vault
 [![Node.js CI](https://github.com/mervyn-teo/cs4218-2520-ecom-project-cs4218-2520-team04/actions/workflows/node.js.yml/badge.svg)](https://github.com/mervyn-teo/cs4218-2520-ecom-project-cs4218-2520-team04/actions/workflows/node.js.yml)
 
+[🎉Click me for MS1 CI URL🎉](https://github.com/mervyn-teo/cs4218-2520-ecom-project-cs4218-2520-team04/actions/runs/21817729423/job/62943059474)
+
 ## 1. Project Introduction
 
 Virtual Vault is a full-stack MERN (MongoDB, Express.js, React.js, Node.js) e-commerce website, offering seamless connectivity and user-friendly features. The platform provides a robust framework for online shopping. The website is designed to adapt to evolving business needs and can be efficiently extended.
