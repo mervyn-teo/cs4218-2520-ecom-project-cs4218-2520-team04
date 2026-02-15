@@ -1,4 +1,4 @@
-import { Routes, Route } from "react-router-dom";
+import {Routes, Route, Navigate} from "react-router-dom";
 import HomePage from "./pages/HomePage";
 import About from "./pages/About";
 import Contact from "./pages/Contact";
@@ -23,6 +23,17 @@ import Categories from "./pages/Categories";
 import CategoryProduct from "./pages/CategoryProduct";
 import CartPage from "./pages/CartPage";
 import AdminOrders from "./pages/admin/AdminOrders";
+const ProtectedRoute = ({ children }) => {
+  const authData = localStorage.getItem("auth");
+  const parsedAuth = authData ? JSON.parse(authData) : null;
+
+  if (parsedAuth?.token) {
+    return <Navigate to="/" />;
+  }
+
+  return children;
+};
+
 function App() {
   return (
     <>
@@ -47,8 +58,16 @@ function App() {
           <Route path="admin/users" element={<Users />} />
           <Route path="admin/orders" element={<AdminOrders />} />
         </Route>
-        <Route path="/register" element={<Register />} />
-        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={
+          <ProtectedRoute>
+            <Register />
+          </ProtectedRoute>
+        } />
+        <Route path="/login" element={
+          <ProtectedRoute>
+            <Login />
+          </ProtectedRoute>
+        } />
         <Route path="/about" element={<About />} />
         <Route path="/contact" element={<Contact />} />
         <Route path="/policy" element={<Policy />} />

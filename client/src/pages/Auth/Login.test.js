@@ -166,6 +166,31 @@ describe('Login Component', () => {
         expect(toast.error).toHaveBeenCalledWith('Something went wrong');
     });
 
+    it('should change loading state on login attempt', async () => {
+        axios.post.mockResolvedValueOnce({ data: { success: false } });
+
+        const {getByPlaceholderText, getByText} = render(
+            <MemoryRouter initialEntries={['/login']}>
+                <Routes><Route path="/login" element={<Login />} /></Routes>
+            </MemoryRouter>
+        );
+
+        const loginBtn = getByText('LOGIN');
+
+        fireEvent.change(getByPlaceholderText('Enter Your Email'), { target: { value: 'test@example.com' } });
+        fireEvent.change(getByPlaceholderText('Enter Your Password'), { target: { value: 'password123' } });
+        fireEvent.click(loginBtn);
+
+        expect(loginBtn).toBeDisabled();
+        expect(loginBtn).toHaveTextContent(/Logging in.../i);
+
+        await waitFor(() => expect(axios.post).toHaveBeenCalled());
+        await waitFor(() => {
+            expect(loginBtn).not.toBeDisabled();
+            expect(loginBtn).toHaveTextContent(/LOGIN/i);
+            }, {timeout: 3000});
+    });
+
     it('should redirect to forgot-password page when forgot button is pressed', () => {
         const { getByText } = render(
             <MemoryRouter initialEntries={['/login']}>

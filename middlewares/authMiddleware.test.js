@@ -42,7 +42,10 @@ describe("Auth Middleware Tests", () => {
     // --- IS ADMIN TESTS ---
     describe("isAdmin", () => {
         it("should authorize admin users (role 1)", async () => {
+            // Updated: We manually set req.user because isAdmin assumes requireSignIn ran first
             req.user = { _id: "admin_id" };
+
+            // We do NOT mock JWT.verify here anymore, because your new isAdmin code doesn't use it.
             userModel.findById.mockResolvedValue({ role: 1 });
 
             await isAdmin(req, res, next);
@@ -62,13 +65,16 @@ describe("Auth Middleware Tests", () => {
 
         it("should handle errors gracefully", async () => {
             req.user = { _id: "id" };
+            // Simulate DB error
             userModel.findById.mockRejectedValue(new Error("Test Error"));
 
             await isAdmin(req, res, next);
 
             expect(console.log).toHaveBeenCalled();
             expect(res.status).toHaveBeenCalledWith(401);
-            expect(res.send).toEqual(expect.anything());
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({
+                message: "Error in admin middleware"
+            }));
         });
     });
 });
