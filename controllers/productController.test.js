@@ -3,6 +3,7 @@ import categoryModel from "../models/categoryModel.js";
 import orderModel from "../models/orderModel.js";
 import slugify from "slugify";
 import fs from "fs";
+import * as braintree from "braintree";
 import {
   createProductController,
   deleteProductController,
@@ -15,7 +16,9 @@ import {
   productListController,
   searchProductController,
   relatedProductController,
-  productCategoryController
+  productCategoryController,
+  braintreePaymentController,
+  braintreeTokenController,
 } from "./productController.js";
 
 // Mock dependencies
@@ -24,16 +27,24 @@ jest.mock("../models/categoryModel.js");
 jest.mock("../models/orderModel.js");
 jest.mock("slugify");
 jest.mock("fs");
-jest.mock("braintree", () => ({
-  BraintreeGateway: jest.fn(() => ({})),
-  Environment: { Sandbox: "sandbox" },
-}));
+jest.mock("braintree", () => {
+  const gateway = {
+    clientToken: { generate: jest.fn() },
+    transaction: { sale: jest.fn() },
+  };
+  return {
+    BraintreeGateway: jest.fn(() => gateway),
+    Environment: { Sandbox: "sandbox" },
+    __mockGateway: gateway,
+  };
+});
 
 // Helpers
 const mockRes = () => {
   const res = {};
   res.status = jest.fn().mockReturnValue(res);
   res.send = jest.fn().mockReturnValue(res);
+  res.json = jest.fn().mockReturnValue(res);
   return res;
 };
 
@@ -59,6 +70,8 @@ const mockReq = (overrides = {}) => ({
   ...overrides,
 });
 
+const getMockBraintreeGateway = () => braintree.__mockGateway;
+
 beforeEach(() => {
   jest.spyOn(console, "log").mockImplementation(() => {});
 });
@@ -66,8 +79,6 @@ beforeEach(() => {
 afterEach(() => {
   jest.restoreAllMocks();
 });
-
-
 
 // Tan Wei Lian, A0269750U
 describe("createProductController", () => {
@@ -90,7 +101,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Name is Required" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Name is Required",
+    });
   });
 
   test("should return 400 when name is whitespace only", async () => {
@@ -102,9 +116,11 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Name is Required" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Name is Required",
+    });
   });
-
 
   // validate description
   test("should return 400 when description is missing", async () => {
@@ -118,7 +134,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Description is Required" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Description is Required",
+    });
   });
 
   test("should return 400 when description is whitespace only", async () => {
@@ -130,7 +149,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Description is Required" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Description is Required",
+    });
   });
 
   // validate price
@@ -145,7 +167,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Price is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Price is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when price is not a number", async () => {
@@ -157,7 +182,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Price is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Price is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when price is an empty string", async () => {
@@ -169,7 +197,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Price is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Price is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when price is negative", async () => {
@@ -181,7 +212,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Price is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Price is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when price is -1 (boundary below 0)", async () => {
@@ -193,7 +227,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Price is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Price is Required and must be a non-negative number",
+    });
   });
 
   test("should accept price of 0 (free product)", async () => {
@@ -212,7 +249,10 @@ describe("createProductController", () => {
     // Assert — price 0 accepted, product created
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ success: true, message: "Product Created Successfully" })
+      expect.objectContaining({
+        success: true,
+        message: "Product Created Successfully",
+      }),
     );
   });
 
@@ -226,7 +266,10 @@ describe("createProductController", () => {
 
     // Assert — passes price validation, fails at category lookup
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   // validate category
@@ -241,7 +284,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category is Required" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category is Required",
+    });
   });
 
   // validate quantity
@@ -256,7 +302,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Quantity is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Quantity is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when quantity is not a number", async () => {
@@ -268,7 +317,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Quantity is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Quantity is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when quantity is negative", async () => {
@@ -280,7 +332,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Quantity is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Quantity is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when quantity is -1 (boundary below 0)", async () => {
@@ -292,7 +347,10 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Quantity is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Quantity is Required and must be a non-negative number",
+    });
   });
 
   test("should accept quantity of 0 (out of stock)", async () => {
@@ -311,7 +369,10 @@ describe("createProductController", () => {
     // Assert — quantity 0 accepted, product created
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ success: true, message: "Product Created Successfully" })
+      expect.objectContaining({
+        success: true,
+        message: "Product Created Successfully",
+      }),
     );
   });
 
@@ -325,7 +386,10 @@ describe("createProductController", () => {
 
     // Assert — passes quantity validation, fails at category lookup
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   // validate photo
@@ -338,25 +402,37 @@ describe("createProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Photo is Required" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Photo is Required",
+    });
   });
 
   test("should return 400 when photo exceeds 1MB", async () => {
     // Arrange
-    const req = mockReq({ files: { photo: { size: 1000001, path: "/tmp/big.jpg", type: "image/jpeg" } } });
+    const req = mockReq({
+      files: {
+        photo: { size: 1000001, path: "/tmp/big.jpg", type: "image/jpeg" },
+      },
+    });
 
     // Act
     await createProductController(req, res);
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Photo should be less than 1mb" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Photo should be less than 1mb",
+    });
   });
 
   test("should accept photo of exactly 1000000 bytes (boundary at limit)", async () => {
     // Arrange — size === 1000000 passes because check is > not >=
     const req = mockReq({
-      files: { photo: { size: 1000000, path: "/tmp/photo.jpg", type: "image/jpeg" } },
+      files: {
+        photo: { size: 1000000, path: "/tmp/photo.jpg", type: "image/jpeg" },
+      },
     });
     categoryModel.findById.mockResolvedValue(null);
 
@@ -365,13 +441,18 @@ describe("createProductController", () => {
 
     // Assert — passes photo validation, fails at category lookup
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   test("should accept photo of 999999 bytes (boundary below limit)", async () => {
     // Arrange
     const req = mockReq({
-      files: { photo: { size: 999999, path: "/tmp/photo.jpg", type: "image/jpeg" } },
+      files: {
+        photo: { size: 999999, path: "/tmp/photo.jpg", type: "image/jpeg" },
+      },
     });
     categoryModel.findById.mockResolvedValue(null);
 
@@ -380,7 +461,10 @@ describe("createProductController", () => {
 
     // Assert — passes photo validation, fails at category lookup
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   // validate category
@@ -395,7 +479,10 @@ describe("createProductController", () => {
     // Assert
     expect(categoryModel.findById).toHaveBeenCalledWith("cat123");
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   // happy path
@@ -416,7 +503,7 @@ describe("createProductController", () => {
     // Assert
     expect(slugify).toHaveBeenCalledWith("Test Product");
     expect(productModel).toHaveBeenCalledWith(
-      expect.objectContaining({ name: "Test Product", slug: "test-product" })
+      expect.objectContaining({ name: "Test Product", slug: "test-product" }),
     );
     expect(fs.readFileSync).toHaveBeenCalledWith("/tmp/photo.jpg");
     expect(productInstance.photo.data).toEqual(Buffer.from("photo-data"));
@@ -424,14 +511,21 @@ describe("createProductController", () => {
     expect(saveMock).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(201);
     expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ success: true, message: "Product Created Successfully" })
+      expect.objectContaining({
+        success: true,
+        message: "Product Created Successfully",
+      }),
     );
   });
 
   test("should trim name and description before saving", async () => {
     // Arrange — both have surrounding whitespace
     const req = mockReq({
-      fields: { ...validFields(), name: "  Padded Name  ", description: "  Padded Desc  " },
+      fields: {
+        ...validFields(),
+        name: "  Padded Name  ",
+        description: "  Padded Desc  ",
+      },
     });
     categoryModel.findById.mockResolvedValue({ _id: "cat123" });
     slugify.mockReturnValue("padded-name");
@@ -450,7 +544,7 @@ describe("createProductController", () => {
         name: "Padded Name",
         description: "Padded Desc",
         slug: "padded-name",
-      })
+      }),
     );
     expect(res.status).toHaveBeenCalledWith(201);
   });
@@ -603,7 +697,7 @@ describe("deleteProductController", () => {
       expect.objectContaining({
         success: false,
         message: "Error while deleting product",
-      })
+      }),
     );
   });
 });
@@ -636,7 +730,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Name is Required" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Name is Required",
+    });
   });
 
   test("should return 400 when name is whitespace only", async () => {
@@ -651,7 +748,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Name is Required" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Name is Required",
+    });
   });
 
   test("should return 400 when description is missing", async () => {
@@ -665,7 +765,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Description is Required" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Description is Required",
+    });
   });
 
   test("should return 400 when description is whitespace only", async () => {
@@ -680,7 +783,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Description is Required" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Description is Required",
+    });
   });
 
   test("should return 400 when price is missing", async () => {
@@ -694,7 +800,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Price is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Price is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when price is not a number", async () => {
@@ -709,7 +818,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Price is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Price is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when price is an empty string", async () => {
@@ -724,7 +836,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Price is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Price is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when price is negative", async () => {
@@ -739,7 +854,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Price is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Price is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when price is -1 (boundary below 0)", async () => {
@@ -754,7 +872,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Price is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Price is Required and must be a non-negative number",
+    });
   });
 
   test("should accept price of 0", async () => {
@@ -771,7 +892,10 @@ describe("updateProductController", () => {
 
     // Assert — passes price check, fails at category lookup
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   test("should accept price of 1 (boundary above 0)", async () => {
@@ -788,7 +912,10 @@ describe("updateProductController", () => {
 
     // Assert — passes price validation, fails at category lookup
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   test("should return 400 when category is missing", async () => {
@@ -802,7 +929,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category is Required" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category is Required",
+    });
   });
 
   test("should return 400 when quantity is missing", async () => {
@@ -816,7 +946,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Quantity is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Quantity is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when quantity is not a number", async () => {
@@ -831,7 +964,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Quantity is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Quantity is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when quantity is negative", async () => {
@@ -846,7 +982,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Quantity is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Quantity is Required and must be a non-negative number",
+    });
   });
 
   test("should return 400 when quantity is -1 (boundary below 0)", async () => {
@@ -861,7 +1000,10 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Quantity is Required and must be a non-negative number" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Quantity is Required and must be a non-negative number",
+    });
   });
 
   test("should accept quantity of 0", async () => {
@@ -878,7 +1020,10 @@ describe("updateProductController", () => {
 
     // Assert — passes quantity check, fails at category lookup
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   test("should accept quantity of 1 (boundary above 0)", async () => {
@@ -895,13 +1040,18 @@ describe("updateProductController", () => {
 
     // Assert — passes quantity validation, fails at category lookup
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   test("should return 400 when photo exceeds 1MB", async () => {
     // Arrange
     const req = mockReq({
-      files: { photo: { size: 1000001, path: "/tmp/big.jpg", type: "image/jpeg" } },
+      files: {
+        photo: { size: 1000001, path: "/tmp/big.jpg", type: "image/jpeg" },
+      },
       params: { pid: "p1" },
     });
 
@@ -910,13 +1060,18 @@ describe("updateProductController", () => {
 
     // Assert
     expect(res.status).toHaveBeenCalledWith(400);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Photo should be less than 1mb" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Photo should be less than 1mb",
+    });
   });
 
   test("should accept photo of exactly 1000000 bytes (boundary at limit)", async () => {
     // Arrange — size === 1000000 passes because check is > not >=
     const req = mockReq({
-      files: { photo: { size: 1000000, path: "/tmp/photo.jpg", type: "image/jpeg" } },
+      files: {
+        photo: { size: 1000000, path: "/tmp/photo.jpg", type: "image/jpeg" },
+      },
       params: { pid: "p1" },
     });
     categoryModel.findById.mockResolvedValue(null);
@@ -926,13 +1081,18 @@ describe("updateProductController", () => {
 
     // Assert — passes photo validation, fails at category lookup
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   test("should accept photo of 999999 bytes (boundary below limit)", async () => {
     // Arrange
     const req = mockReq({
-      files: { photo: { size: 999999, path: "/tmp/photo.jpg", type: "image/jpeg" } },
+      files: {
+        photo: { size: 999999, path: "/tmp/photo.jpg", type: "image/jpeg" },
+      },
       params: { pid: "p1" },
     });
     categoryModel.findById.mockResolvedValue(null);
@@ -942,7 +1102,10 @@ describe("updateProductController", () => {
 
     // Assert — passes photo validation, fails at category lookup
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   // --- Category & product lookup ---
@@ -958,7 +1121,10 @@ describe("updateProductController", () => {
     // Assert
     expect(categoryModel.findById).toHaveBeenCalledWith("cat123");
     expect(res.status).toHaveBeenCalledWith(404);
-    expect(res.send).toHaveBeenCalledWith({ success: false, message: "Category not found" });
+    expect(res.send).toHaveBeenCalledWith({
+      success: false,
+      message: "Category not found",
+    });
   });
 
   test("should return 404 when product does not exist", async () => {
@@ -996,13 +1162,16 @@ describe("updateProductController", () => {
     expect(productModel.findByIdAndUpdate).toHaveBeenCalledWith(
       "p1",
       expect.objectContaining({ name: "Test Product", slug: "test-product" }),
-      { new: true }
+      { new: true },
     );
     expect(fs.readFileSync).not.toHaveBeenCalled();
     expect(updatedProduct.save).toHaveBeenCalled();
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.send).toHaveBeenCalledWith(
-      expect.objectContaining({ success: true, message: "Product Updated Successfully" })
+      expect.objectContaining({
+        success: true,
+        message: "Product Updated Successfully",
+      }),
     );
   });
 
@@ -1030,7 +1199,11 @@ describe("updateProductController", () => {
   test("should trim name and description before updating", async () => {
     // Arrange
     const req = mockReq({
-      fields: { ...validFields(), name: "  Padded  ", description: "  Padded Desc  " },
+      fields: {
+        ...validFields(),
+        name: "  Padded  ",
+        description: "  Padded Desc  ",
+      },
       params: { pid: "p1" },
       files: {},
     });
@@ -1050,7 +1223,7 @@ describe("updateProductController", () => {
         description: "Padded Desc",
         slug: "padded",
       }),
-      { new: true }
+      { new: true },
     );
     expect(res.status).toHaveBeenCalledWith(200);
   });
@@ -1101,6 +1274,380 @@ describe("updateProductController", () => {
   });
 });
 
+// Teo Kai Xiang, A0272558U
+// Test cases generated by GPT-5.3-Codex via planning mode. Reviewed and edited by me afterwards
+describe("braintreeTokenController", () => {
+  let req, res;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    req = mockReq();
+    res = mockRes();
+  });
+
+  describe("Happy Path Tests - when everything works as expected, the controller", () => {
+    test("should return generated braintree client token response", async () => {
+      // Arrange
+      const responseObj = { clientToken: "token-123" };
+      getMockBraintreeGateway().clientToken.generate.mockImplementationOnce(
+        (payload, callback) => callback(null, responseObj),
+      );
+
+      // Act
+      await braintreeTokenController(req, res);
+
+      // Assert
+      expect(
+        getMockBraintreeGateway().clientToken.generate,
+      ).toHaveBeenCalledWith({}, expect.any(Function));
+      expect(res.send).toHaveBeenCalledWith(responseObj);
+      expect(res.status).not.toHaveBeenCalledWith(500);
+    });
+  });
+
+  describe("Unhappy Path Tests - when there are issues, the controller", () => {
+    test("should return 500 when braintree generate returns an error", async () => {
+      // Arrange
+      const errObj = new Error("token generation failed");
+      getMockBraintreeGateway().clientToken.generate.mockImplementationOnce(
+        (payload, callback) => callback(errObj, null),
+      );
+
+      // Act
+      await braintreeTokenController(req, res);
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.send).toHaveBeenCalledWith(errObj);
+    });
+
+    test("should log when generate throws synchronously", async () => {
+      // Arrange
+      getMockBraintreeGateway().clientToken.generate.mockImplementationOnce(
+        () => {
+          throw new Error("sync token throw");
+        },
+      );
+
+      // Act
+      await braintreeTokenController(req, res);
+
+      // Assert
+      expect(console.log).toHaveBeenCalled();
+      expect(res.send).not.toHaveBeenCalled();
+      expect(res.json).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// Teo Kai Xiang, A0272558U
+// Test cases generated by GPT-5.3-Codex via planning mode. Reviewed and edited by me afterwards
+describe("braintreePaymentController", () => {
+  let req, res;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    res = mockRes();
+  });
+
+  describe("Happy Path Tests - when everything works as expected, the controller", () => {
+    test("should process payment, save order, and return ok true", async () => {
+      // Arrange
+      const cart = [
+        { _id: "p1", price: 10 },
+        { _id: "p2", price: 15 },
+      ];
+      const nonce = "nonce-123";
+      const buyerId = "buyer123";
+      const resultObj = { transaction: { id: "txn-1" } };
+      const saveMock = jest.fn().mockResolvedValue({ _id: "order1" });
+      orderModel.mockImplementation(() => ({ save: saveMock }));
+      req = mockReq({
+        body: { nonce, cart },
+        user: { _id: buyerId },
+      });
+      getMockBraintreeGateway().transaction.sale.mockImplementationOnce(
+        (payload, callback) => callback(null, resultObj),
+      );
+
+      // Act
+      await braintreePaymentController(req, res);
+
+      // Assert
+      expect(getMockBraintreeGateway().transaction.sale).toHaveBeenCalledWith(
+        {
+          amount: 25,
+          paymentMethodNonce: nonce,
+          options: { submitForSettlement: true },
+        },
+        expect.any(Function),
+      );
+      expect(orderModel).toHaveBeenCalledWith({
+        products: cart,
+        payment: resultObj,
+        buyer: buyerId,
+      });
+      expect(saveMock).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith({ ok: true });
+    });
+
+    test("should compute total amount correctly for multi-item cart", async () => {
+      // Arrange
+      const cart = [
+        { _id: "p1", price: 29.99 },
+        { _id: "p2", price: 50 },
+        { _id: "p3", price: 20.01 },
+      ];
+      const saveMock = jest.fn().mockResolvedValue({ _id: "order2" });
+      orderModel.mockImplementation(() => ({ save: saveMock }));
+      req = mockReq({
+        body: { nonce: "nonce-456", cart },
+        user: { _id: "buyer456" },
+      });
+      getMockBraintreeGateway().transaction.sale.mockImplementationOnce(
+        (payload, callback) => callback(null, { transaction: { id: "txn-2" } }),
+      );
+
+      // Act
+      await braintreePaymentController(req, res);
+
+      // Assert
+      expect(getMockBraintreeGateway().transaction.sale).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 100 }),
+        expect.any(Function),
+      );
+      expect(res.json).toHaveBeenCalledWith({ ok: true });
+    });
+  });
+
+  describe("Unhappy Path Tests - when there are issues, the controller", () => {
+    test("should return 500 when sale callback returns error and no result", async () => {
+      // Arrange
+      const errorObj = new Error("payment failed");
+      req = mockReq({
+        body: { nonce: "nonce-fail", cart: [{ _id: "p1", price: 10 }] },
+        user: { _id: "buyer-fail" },
+      });
+      getMockBraintreeGateway().transaction.sale.mockImplementationOnce(
+        (payload, callback) => callback(errorObj, null),
+      );
+
+      // Act
+      await braintreePaymentController(req, res);
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.send).toHaveBeenCalledWith(errorObj);
+      expect(orderModel).not.toHaveBeenCalled();
+    });
+
+    test("should log when transaction.sale throws synchronously", async () => {
+      // Arrange
+      req = mockReq({
+        body: { nonce: "nonce-sync-throw", cart: [{ _id: "p1", price: 10 }] },
+        user: { _id: "buyer-sync" },
+      });
+      getMockBraintreeGateway().transaction.sale.mockImplementationOnce(() => {
+        throw new Error("sync sale throw");
+      });
+
+      // Act
+      await braintreePaymentController(req, res);
+
+      // Assert
+      expect(console.log).toHaveBeenCalled();
+      expect(res.json).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// Teo Kai Xiang, A0272558U
+// Test cases generated by GPT-5.3-Codex via planning mode. Reviewed and edited by me afterwards
+describe("braintreeTokenController", () => {
+  let req, res;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    req = mockReq();
+    res = mockRes();
+  });
+
+  describe("Happy Path Tests - when everything works as expected, the controller", () => {
+    test("should return generated braintree client token response", async () => {
+      // Arrange
+      const responseObj = { clientToken: "token-123" };
+      getMockBraintreeGateway().clientToken.generate.mockImplementationOnce(
+        (payload, callback) => callback(null, responseObj),
+      );
+
+      // Act
+      await braintreeTokenController(req, res);
+
+      // Assert
+      expect(
+        getMockBraintreeGateway().clientToken.generate,
+      ).toHaveBeenCalledWith({}, expect.any(Function));
+      expect(res.send).toHaveBeenCalledWith(responseObj);
+      expect(res.status).not.toHaveBeenCalledWith(500);
+    });
+  });
+
+  describe("Unhappy Path Tests - when there are issues, the controller", () => {
+    test("should return 500 when braintree generate returns an error", async () => {
+      // Arrange
+      const errObj = new Error("token generation failed");
+      getMockBraintreeGateway().clientToken.generate.mockImplementationOnce(
+        (payload, callback) => callback(errObj, null),
+      );
+
+      // Act
+      await braintreeTokenController(req, res);
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.send).toHaveBeenCalledWith(errObj);
+    });
+
+    test("should log when generate throws synchronously", async () => {
+      // Arrange
+      getMockBraintreeGateway().clientToken.generate.mockImplementationOnce(
+        () => {
+          throw new Error("sync token throw");
+        },
+      );
+
+      // Act
+      await braintreeTokenController(req, res);
+
+      // Assert
+      expect(console.log).toHaveBeenCalled();
+      expect(res.send).not.toHaveBeenCalled();
+      expect(res.json).not.toHaveBeenCalled();
+    });
+  });
+});
+
+// Teo Kai Xiang, A0272558U
+// Test cases generated by GPT-5.3-Codex via planning mode. Reviewed and edited by me afterwards
+describe("braintreePaymentController", () => {
+  let req, res;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    res = mockRes();
+  });
+
+  describe("Happy Path Tests - when everything works as expected, the controller", () => {
+    test("should process payment, save order, and return ok true", async () => {
+      // Arrange
+      const cart = [
+        { _id: "p1", price: 10 },
+        { _id: "p2", price: 15 },
+      ];
+      const nonce = "nonce-123";
+      const buyerId = "buyer123";
+      const resultObj = { transaction: { id: "txn-1" } };
+      const saveMock = jest.fn().mockResolvedValue({ _id: "order1" });
+      orderModel.mockImplementation(() => ({ save: saveMock }));
+      req = mockReq({
+        body: { nonce, cart },
+        user: { _id: buyerId },
+      });
+      getMockBraintreeGateway().transaction.sale.mockImplementationOnce(
+        (payload, callback) => callback(null, resultObj),
+      );
+
+      // Act
+      await braintreePaymentController(req, res);
+
+      // Assert
+      expect(getMockBraintreeGateway().transaction.sale).toHaveBeenCalledWith(
+        {
+          amount: 25,
+          paymentMethodNonce: nonce,
+          options: { submitForSettlement: true },
+        },
+        expect.any(Function),
+      );
+      expect(orderModel).toHaveBeenCalledWith({
+        products: cart,
+        payment: resultObj,
+        buyer: buyerId,
+      });
+      expect(saveMock).toHaveBeenCalled();
+      expect(res.json).toHaveBeenCalledWith({ ok: true });
+    });
+
+    test("should compute total amount correctly for multi-item cart", async () => {
+      // Arrange
+      const cart = [
+        { _id: "p1", price: 29.99 },
+        { _id: "p2", price: 50 },
+        { _id: "p3", price: 20.01 },
+      ];
+      const saveMock = jest.fn().mockResolvedValue({ _id: "order2" });
+      orderModel.mockImplementation(() => ({ save: saveMock }));
+      req = mockReq({
+        body: { nonce: "nonce-456", cart },
+        user: { _id: "buyer456" },
+      });
+      getMockBraintreeGateway().transaction.sale.mockImplementationOnce(
+        (payload, callback) => callback(null, { transaction: { id: "txn-2" } }),
+      );
+
+      // Act
+      await braintreePaymentController(req, res);
+
+      // Assert
+      expect(getMockBraintreeGateway().transaction.sale).toHaveBeenCalledWith(
+        expect.objectContaining({ amount: 100 }),
+        expect.any(Function),
+      );
+      expect(res.json).toHaveBeenCalledWith({ ok: true });
+    });
+  });
+
+  describe("Unhappy Path Tests - when there are issues, the controller", () => {
+    test("should return 500 when sale callback returns error and no result", async () => {
+      // Arrange
+      const errorObj = new Error("payment failed");
+      req = mockReq({
+        body: { nonce: "nonce-fail", cart: [{ _id: "p1", price: 10 }] },
+        user: { _id: "buyer-fail" },
+      });
+      getMockBraintreeGateway().transaction.sale.mockImplementationOnce(
+        (payload, callback) => callback(errorObj, null),
+      );
+
+      // Act
+      await braintreePaymentController(req, res);
+
+      // Assert
+      expect(res.status).toHaveBeenCalledWith(500);
+      expect(res.send).toHaveBeenCalledWith(errorObj);
+      expect(orderModel).not.toHaveBeenCalled();
+    });
+
+    test("should log when transaction.sale throws synchronously", async () => {
+      // Arrange
+      req = mockReq({
+        body: { nonce: "nonce-sync-throw", cart: [{ _id: "p1", price: 10 }] },
+        user: { _id: "buyer-sync" },
+      });
+      getMockBraintreeGateway().transaction.sale.mockImplementationOnce(() => {
+        throw new Error("sync sale throw");
+      });
+
+      // Act
+      await braintreePaymentController(req, res);
+
+      // Assert
+      expect(console.log).toHaveBeenCalled();
+      expect(res.json).not.toHaveBeenCalled();
+    });
+  });
+});
+
 // Yeo Yi Wen, A0273575U
 describe("getProductController", () => {
   // Tests setup
@@ -1110,7 +1657,7 @@ describe("getProductController", () => {
     req = {};
     res = {
       status: jest.fn().mockReturnThis(),
-      send: jest.fn()
+      send: jest.fn(),
     };
     jest.clearAllMocks();
   });
@@ -1120,29 +1667,31 @@ describe("getProductController", () => {
     // Arrange
     const mockProducts = [
       { _id: "1", name: "Product 1", category: { _id: "c1", name: "Cat1" } },
-      { _id: "2", name: "Product 2", category: { _id: "c2", name: "Cat2" } }
+      { _id: "2", name: "Product 2", category: { _id: "c2", name: "Cat2" } },
     ];
 
     productModel.find.mockReturnValue({
       populate: jest.fn().mockReturnValue({
         select: jest.fn().mockReturnValue({
           limit: jest.fn().mockReturnValue({
-            sort: jest.fn().mockResolvedValue(mockProducts)
-          })
-        })
-      })
+            sort: jest.fn().mockResolvedValue(mockProducts),
+          }),
+        }),
+      }),
     });
 
     // Act
     await getProductController(req, res);
 
     // Assert
-    expect(productModel.find().populate().select().limit().sort).toHaveBeenCalledWith({ createdAt: -1 });
+    expect(
+      productModel.find().populate().select().limit().sort,
+    ).toHaveBeenCalledWith({ createdAt: -1 });
     expect(res.send).toHaveBeenCalledWith({
       success: true,
       countTotal: 2,
       message: "All Products",
-      products: mockProducts
+      products: mockProducts,
     });
   });
 
@@ -1152,48 +1701,52 @@ describe("getProductController", () => {
       populate: jest.fn().mockReturnValue({
         select: jest.fn().mockReturnValue({
           limit: jest.fn().mockReturnValue({
-            sort: jest.fn().mockResolvedValue([])
-          })
-        })
-      })
+            sort: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      }),
     });
 
     // Act
     await getProductController(req, res);
 
     // Assert
-    expect(productModel.find().populate().select().limit().sort).toHaveBeenCalledWith({ createdAt: -1 });
+    expect(
+      productModel.find().populate().select().limit().sort,
+    ).toHaveBeenCalledWith({ createdAt: -1 });
     expect(res.send).toHaveBeenCalledWith({
       success: true,
       countTotal: 0,
-      message: 'All Products',
-      products: []
+      message: "All Products",
+      products: [],
     });
   });
 
   test("should handle errors gracefully", async () => {
     // Arrange
     const error = new Error("Error in getting products");
-    
+
     productModel.find.mockReturnValue({
       populate: jest.fn().mockReturnValue({
         select: jest.fn().mockReturnValue({
           limit: jest.fn().mockReturnValue({
-            sort: jest.fn().mockRejectedValue(error)
-          })
-        })
-      })
+            sort: jest.fn().mockRejectedValue(error),
+          }),
+        }),
+      }),
     });
 
     // Act
     await getProductController(req, res);
 
     // Assert
-    expect(productModel.find().populate().select().limit().sort).toHaveBeenCalledWith({ createdAt: -1 });
+    expect(
+      productModel.find().populate().select().limit().sort,
+    ).toHaveBeenCalledWith({ createdAt: -1 });
     expect(res.send).toHaveBeenCalledWith({
       success: false,
       message: "Error in getting products",
-      error: error.message
+      error: error.message,
     });
   });
 });
@@ -1206,12 +1759,12 @@ describe("getSingleProductController", () => {
   beforeEach(() => {
     req = {
       params: {
-        slug: "test-product"
-      }
+        slug: "test-product",
+      },
     };
     res = {
       status: jest.fn().mockReturnThis(),
-      send: jest.fn()
+      send: jest.fn(),
     };
     jest.clearAllMocks();
   });
@@ -1222,8 +1775,8 @@ describe("getSingleProductController", () => {
     const mockProduct = { name: "Test", slug: "test-product" };
     productModel.findOne.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        populate: jest.fn().mockResolvedValue(mockProduct)
-      })
+        populate: jest.fn().mockResolvedValue(mockProduct),
+      }),
     });
 
     // Act
@@ -1234,7 +1787,7 @@ describe("getSingleProductController", () => {
     expect(res.send).toHaveBeenCalledWith({
       success: true,
       message: "Single Product Fetched",
-      product: mockProduct
+      product: mockProduct,
     });
   });
 
@@ -1242,8 +1795,8 @@ describe("getSingleProductController", () => {
     // Arrange
     productModel.findOne.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        populate: jest.fn().mockResolvedValue(null)
-      })
+        populate: jest.fn().mockResolvedValue(null),
+      }),
     });
 
     // Act
@@ -1253,7 +1806,7 @@ describe("getSingleProductController", () => {
     expect(res.status).toHaveBeenCalledWith(404);
     expect(res.send).toHaveBeenCalledWith({
       success: false,
-      message: "Product not found"
+      message: "Product not found",
     });
   });
 
@@ -1262,8 +1815,8 @@ describe("getSingleProductController", () => {
     const error = new Error("Error: Status 500");
     productModel.findOne.mockReturnValue({
       select: jest.fn().mockReturnValue({
-        populate: jest.fn().mockRejectedValue(error)
-      })
+        populate: jest.fn().mockRejectedValue(error),
+      }),
     });
 
     // Act
@@ -1274,7 +1827,7 @@ describe("getSingleProductController", () => {
     expect(res.send).toHaveBeenCalledWith({
       success: false,
       message: "Error while getting single product",
-      error: error
+      error: error,
     });
   });
 });
@@ -1288,7 +1841,7 @@ describe("productPhotoController", () => {
     res = {
       set: jest.fn().mockReturnThis(),
       status: jest.fn().mockReturnThis(),
-      send: jest.fn()
+      send: jest.fn(),
     };
     jest.clearAllMocks();
   });
@@ -1299,11 +1852,11 @@ describe("productPhotoController", () => {
     const mockProduct = {
       photo: {
         data: Buffer.from("fake-image-data"),
-        contentType: "image/jpeg"
-      }
+        contentType: "image/jpeg",
+      },
     };
     productModel.findById.mockReturnValue({
-      select: jest.fn().mockResolvedValue(mockProduct)
+      select: jest.fn().mockResolvedValue(mockProduct),
     });
 
     // Act
@@ -1322,11 +1875,11 @@ describe("productPhotoController", () => {
     const mockProduct = {
       photo: {
         data: null,
-        contentType: "image/png"
-      }
+        contentType: "image/png",
+      },
     };
     productModel.findById.mockReturnValue({
-      select: jest.fn().mockResolvedValue(mockProduct)
+      select: jest.fn().mockResolvedValue(mockProduct),
     });
 
     // Act
@@ -1342,7 +1895,7 @@ describe("productPhotoController", () => {
     // Arrange
     const error = new Error("Product does not exist");
     productModel.findById.mockReturnValue({
-      select: jest.fn().mockRejectedValue(error)
+      select: jest.fn().mockRejectedValue(error),
     });
 
     // Act
@@ -1353,7 +1906,7 @@ describe("productPhotoController", () => {
     expect(res.send).toHaveBeenCalledWith({
       success: false,
       message: "Error while getting photo",
-      error: error
+      error: error,
     });
   });
 });
@@ -1367,12 +1920,12 @@ describe("productFiltersController", () => {
     req = {
       body: {
         checked: [],
-        radio: []
-      }
+        radio: [],
+      },
     };
     res = {
       status: jest.fn().mockReturnThis(),
-      send: jest.fn()
+      send: jest.fn(),
     };
     jest.clearAllMocks();
   });
@@ -1382,18 +1935,18 @@ describe("productFiltersController", () => {
     // Arrange
     req.body.checked = ["cat1"];
     req.body.radio = [];
-    
+
     const mockAllProducts = [
       { _id: "1", name: "Product 1", category: "cat1" },
-      { _id: "2", name: "Product 2", category: "cat2" }
+      { _id: "2", name: "Product 2", category: "cat2" },
     ];
-    
+
     // Mock find to simulate category filtering
     productModel.find.mockImplementation((query) => {
       // Apply category filter
       if (query.category) {
-        const filteredProducts = mockAllProducts.filter(
-          p => query.category.includes(p.category)
+        const filteredProducts = mockAllProducts.filter((p) =>
+          query.category.includes(p.category),
         );
         return Promise.resolve(filteredProducts);
       }
@@ -1405,13 +1958,11 @@ describe("productFiltersController", () => {
 
     // Assert
     expect(productModel.find).toHaveBeenCalledWith({
-      category: ["cat1"]
+      category: ["cat1"],
     });
     expect(res.send).toHaveBeenCalledWith({
       success: true,
-      products: [
-        { _id: "1", name: "Product 1", category: "cat1" }
-      ]
+      products: [{ _id: "1", name: "Product 1", category: "cat1" }],
     });
   });
 
@@ -1420,19 +1971,19 @@ describe("productFiltersController", () => {
     // Arrange
     req.body.checked = ["cat1", "cat2"];
     req.body.radio = [];
-    
+
     const mockAllProducts = [
       { _id: "1", name: "Product 1", category: "cat1" },
       { _id: "2", name: "Product 2", category: "cat2" },
-      { _id: "3", name: "Product 3", category: "cat3" }
+      { _id: "3", name: "Product 3", category: "cat3" },
     ];
-    
+
     // Mock find to simulate category filtering
     productModel.find.mockImplementation((query) => {
       // Apply category filter
       if (query.category) {
-        const filteredProducts = mockAllProducts.filter(
-          p => query.category.includes(p.category)
+        const filteredProducts = mockAllProducts.filter((p) =>
+          query.category.includes(p.category),
         );
         return Promise.resolve(filteredProducts);
       }
@@ -1444,14 +1995,14 @@ describe("productFiltersController", () => {
 
     // Assert
     expect(productModel.find).toHaveBeenCalledWith({
-      category: ["cat1", "cat2"]
+      category: ["cat1", "cat2"],
     });
     expect(res.send).toHaveBeenCalledWith({
       success: true,
-      products: [      
+      products: [
         { _id: "1", name: "Product 1", category: "cat1" },
-        { _id: "2", name: "Product 2", category: "cat2" }
-      ]
+        { _id: "2", name: "Product 2", category: "cat2" },
+      ],
     });
   });
 
@@ -1459,24 +2010,24 @@ describe("productFiltersController", () => {
   test("products should be filtered by price range", async () => {
     // Arrange
     req.body.radio = [100, 500];
-    
+
     const allProducts = [
       { _id: "1", price: 200 },
       { _id: "2", price: 50 }, // will be filtered out
       { _id: "3", price: 300 },
-      { _id: "4", price: 600 } // will be filtered out
+      { _id: "4", price: 600 }, // will be filtered out
     ];
-    
+
     // Mock to simulate price filtering
     productModel.find.mockImplementation((query) => {
       let results = [...allProducts];
-      
+
       if (query.price) {
-        results = results.filter(p => 
-          p.price >= query.price.$gte && p.price <= query.price.$lte
+        results = results.filter(
+          (p) => p.price >= query.price.$gte && p.price <= query.price.$lte,
         );
       }
-      
+
       return Promise.resolve(results);
     });
 
@@ -1485,14 +2036,14 @@ describe("productFiltersController", () => {
 
     // Assert
     expect(productModel.find).toHaveBeenCalledWith({
-      price: { $gte: 100, $lte: 500 }
+      price: { $gte: 100, $lte: 500 },
     });
     expect(res.send).toHaveBeenCalledWith({
       success: true,
       products: [
         { _id: "1", price: 200 },
-        { _id: "3", price: 300 }
-      ]
+        { _id: "3", price: 300 },
+      ],
     });
   });
 
@@ -1501,37 +2052,37 @@ describe("productFiltersController", () => {
     // Arrange
     req.body.checked = ["cat1", "cat2"];
     req.body.radio = [100, 500];
-    
+
     // All products in database (before filtering)
     const allProducts = [
       // Included products
       { _id: "1", name: "Product 1", category: "cat1", price: 200 },
       { _id: "3", name: "Product 3", category: "cat2", price: 300 },
       { _id: "5", name: "Product 5", category: "cat1", price: 450 },
-      
+
       // Excluded products
-      { _id: "2", name: "Product 2", category: "cat2", price: 50 },    // Price too low
-      { _id: "4", name: "Product 4", category: "cat3", price: 250 },   // Wrong category
-      { _id: "6", name: "Product 6", category: "cat1", price: 600 },   // Price too high
-      { _id: "7", name: "Product 7", category: "cat3", price: 700 }    // Wrong category + wrong price
+      { _id: "2", name: "Product 2", category: "cat2", price: 50 }, // Price too low
+      { _id: "4", name: "Product 4", category: "cat3", price: 250 }, // Wrong category
+      { _id: "6", name: "Product 6", category: "cat1", price: 600 }, // Price too high
+      { _id: "7", name: "Product 7", category: "cat3", price: 700 }, // Wrong category + wrong price
     ];
-    
+
     // Mock to simulate filtering
     productModel.find.mockImplementation((query) => {
       let results = [...allProducts];
-      
+
       // Category filter
       if (query.category) {
-        results = results.filter(p => query.category.includes(p.category));
+        results = results.filter((p) => query.category.includes(p.category));
       }
-      
+
       // Price filter
       if (query.price) {
-        results = results.filter(p => 
-          p.price >= query.price.$gte && p.price <= query.price.$lte
+        results = results.filter(
+          (p) => p.price >= query.price.$gte && p.price <= query.price.$lte,
         );
       }
-      
+
       return Promise.resolve(results);
     });
 
@@ -1541,22 +2092,22 @@ describe("productFiltersController", () => {
     // Assert
     expect(productModel.find).toHaveBeenCalledWith({
       category: ["cat1", "cat2"],
-      price: { $gte: 100, $lte: 500 }
+      price: { $gte: 100, $lte: 500 },
     });
     expect(res.send).toHaveBeenCalledWith({
       success: true,
       products: [
         { _id: "1", name: "Product 1", category: "cat1", price: 200 },
         { _id: "3", name: "Product 3", category: "cat2", price: 300 },
-        { _id: "5", name: "Product 5", category: "cat1", price: 450 }
-      ]
+        { _id: "5", name: "Product 5", category: "cat1", price: 450 },
+      ],
     });
   });
 
   // No filters
   test("should return all products with no filters", async () => {
-    const mockProducts = [{ _id: '1' }, { _id: '2' }];
-    
+    const mockProducts = [{ _id: "1" }, { _id: "2" }];
+
     productModel.find.mockResolvedValue(mockProducts);
 
     await productFiltersController(req, res);
@@ -1564,12 +2115,12 @@ describe("productFiltersController", () => {
     expect(productModel.find).toHaveBeenCalledWith({});
     expect(res.send).toHaveBeenCalledWith({
       success: true,
-      products: mockProducts
+      products: mockProducts,
     });
   });
 
   // Error handling
-  test('should handle errors gracefully', async () => {
+  test("should handle errors gracefully", async () => {
     const error = new Error("Error While Filtering Products");
     productModel.find.mockRejectedValue(error);
 
@@ -1579,7 +2130,7 @@ describe("productFiltersController", () => {
     expect(res.send).toHaveBeenCalledWith({
       success: false,
       message: "Error While Filtering Products",
-      error: error
+      error: error,
     });
   });
 });
@@ -1590,12 +2141,12 @@ describe("productCountController", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Create mock request and response
     req = {};
     res = {
       status: jest.fn().mockReturnThis(),
-      send: jest.fn()
+      send: jest.fn(),
     };
   });
 
@@ -1603,7 +2154,7 @@ describe("productCountController", () => {
   test("should return product count successfully", async () => {
     // Arrange
     productModel.find.mockReturnValue({
-      estimatedDocumentCount: jest.fn().mockResolvedValue(67)
+      estimatedDocumentCount: jest.fn().mockResolvedValue(67),
     });
 
     // Act
@@ -1613,7 +2164,7 @@ describe("productCountController", () => {
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.send).toHaveBeenCalledWith({
       success: true,
-      total: 67
+      total: 67,
     });
   });
 
@@ -1622,7 +2173,7 @@ describe("productCountController", () => {
     // Arrange - set up error for estimatedDocumentCount()
     const error = new Error("error from estimatedDocumentCount()");
     productModel.find.mockReturnValue({
-      estimatedDocumentCount: jest.fn().mockRejectedValue(error)
+      estimatedDocumentCount: jest.fn().mockRejectedValue(error),
     });
 
     // Act
@@ -1633,7 +2184,7 @@ describe("productCountController", () => {
     expect(res.send).toHaveBeenCalledWith({
       message: "Error in product count",
       error: error,
-      success: false
+      success: false,
     });
   });
 
@@ -1653,7 +2204,7 @@ describe("productCountController", () => {
     expect(res.send).toHaveBeenCalledWith({
       message: "Error in product count",
       error: error,
-      success: false
+      success: false,
     });
   });
 });
@@ -1666,12 +2217,12 @@ describe("productListController", () => {
   beforeEach(() => {
     req = {
       params: {
-        page: "2" // will be changed to suit tests
-      }
+        page: "2", // will be changed to suit tests
+      },
     };
     res = {
       status: jest.fn().mockReturnThis(),
-      send: jest.fn()
+      send: jest.fn(),
     };
     jest.clearAllMocks();
   });
@@ -1680,52 +2231,56 @@ describe("productListController", () => {
   test("should return product list for a specified page when page param is given", async () => {
     // Arrange
     const mockProducts = [{ _id: "7", name: "Product 7" }];
-    
+
     productModel.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         skip: jest.fn().mockReturnValue({
           limit: jest.fn().mockReturnValue({
-            sort: jest.fn().mockResolvedValue(mockProducts)
-          })
-        })
-      })
+            sort: jest.fn().mockResolvedValue(mockProducts),
+          }),
+        }),
+      }),
     });
 
     // Act
     await productListController(req, res);
 
     // Assert
-    expect(productModel.find().select().skip().limit().sort).toHaveBeenCalledWith({ createdAt: -1 });
+    expect(
+      productModel.find().select().skip().limit().sort,
+    ).toHaveBeenCalledWith({ createdAt: -1 });
     expect(res.send).toHaveBeenCalledWith({
       success: true,
-      products: mockProducts
+      products: mockProducts,
     });
   });
-  
+
   // Happy path 2 - Page 1
   test("should return product list and default to page 1 when there is no page params", async () => {
     // Arrange
     req.params = {};
     const mockProducts = [{ _id: "1", name: "Product 1" }];
-    
+
     productModel.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         skip: jest.fn().mockReturnValue({
           limit: jest.fn().mockReturnValue({
-            sort: jest.fn().mockResolvedValue(mockProducts)
-          })
-        })
-      })
+            sort: jest.fn().mockResolvedValue(mockProducts),
+          }),
+        }),
+      }),
     });
 
     // Act
     await productListController(req, res);
 
     // Assert
-    expect(productModel.find().select().skip().limit().sort).toHaveBeenCalledWith({ createdAt: -1 });
+    expect(
+      productModel.find().select().skip().limit().sort,
+    ).toHaveBeenCalledWith({ createdAt: -1 });
     expect(res.send).toHaveBeenCalledWith({
       success: true,
-      products: mockProducts
+      products: mockProducts,
     });
   });
 
@@ -1736,35 +2291,37 @@ describe("productListController", () => {
       select: jest.fn().mockReturnValue({
         skip: jest.fn().mockReturnValue({
           limit: jest.fn().mockReturnValue({
-            sort: jest.fn().mockResolvedValue([])
-          })
-        })
-      })
+            sort: jest.fn().mockResolvedValue([]),
+          }),
+        }),
+      }),
     });
 
     // Act
     await productListController(req, res);
 
     // Assert
-    expect(productModel.find().select().skip().limit().sort).toHaveBeenCalledWith({ createdAt: -1 });
+    expect(
+      productModel.find().select().skip().limit().sort,
+    ).toHaveBeenCalledWith({ createdAt: -1 });
     expect(res.send).toHaveBeenCalledWith({
       success: true,
-      products: []
+      products: [],
     });
   });
 
   test("should handle errors gracefully", async () => {
     // Arrange
     const error = new Error("error in per page ctrl");
-    
+
     productModel.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         skip: jest.fn().mockReturnValue({
           limit: jest.fn().mockReturnValue({
-            sort: jest.fn().mockRejectedValue(error)
-          })
-        })
-      })
+            sort: jest.fn().mockRejectedValue(error),
+          }),
+        }),
+      }),
     });
 
     // Act
@@ -1774,7 +2331,7 @@ describe("productListController", () => {
     expect(res.send).toHaveBeenCalledWith({
       success: false,
       message: "error in per page ctrl",
-      error: error
+      error: error,
     });
   });
 });
@@ -1787,13 +2344,13 @@ describe("searchProductController", () => {
   beforeEach(() => {
     req = {
       params: {
-        keyword: "test"
-      }
+        keyword: "test",
+      },
     };
     res = {
       json: jest.fn(),
       status: jest.fn().mockReturnThis(),
-      send: jest.fn()
+      send: jest.fn(),
     };
     jest.clearAllMocks();
   });
@@ -1801,9 +2358,12 @@ describe("searchProductController", () => {
   // Happy path
   test("should return products that includes keyword", async () => {
     // Arrange
-    const mockResults = [{ name: "Test Product 1" }, { name: "Test Product 2" }];
+    const mockResults = [
+      { name: "Test Product 1" },
+      { name: "Test Product 2" },
+    ];
     productModel.find.mockReturnValue({
-      select: jest.fn().mockResolvedValue(mockResults)
+      select: jest.fn().mockResolvedValue(mockResults),
     });
 
     // Act
@@ -1813,8 +2373,8 @@ describe("searchProductController", () => {
     expect(productModel.find).toHaveBeenCalledWith({
       $or: [
         { name: { $regex: "test", $options: "i" } },
-        { description: { $regex: "test", $options: "i" } }
-      ]
+        { description: { $regex: "test", $options: "i" } },
+      ],
     });
     expect(res.json).toHaveBeenCalledWith(mockResults);
   });
@@ -1822,7 +2382,7 @@ describe("searchProductController", () => {
   test("should return empty array when no matches are found'", async () => {
     // Arrange
     productModel.find.mockReturnValue({
-      select: jest.fn().mockResolvedValue([])
+      select: jest.fn().mockResolvedValue([]),
     });
 
     // Act
@@ -1836,7 +2396,7 @@ describe("searchProductController", () => {
     // Arrange
     const error = new Error("Error In Search Product API");
     productModel.find.mockReturnValue({
-      select: jest.fn().mockRejectedValue(error)
+      select: jest.fn().mockRejectedValue(error),
     });
 
     // Act
@@ -1847,7 +2407,7 @@ describe("searchProductController", () => {
     expect(res.send).toHaveBeenCalledWith({
       success: false,
       message: "Error In Search Product API",
-      error: error
+      error: error,
     });
   });
 });
@@ -1861,12 +2421,12 @@ describe("relatedProductController", () => {
     req = {
       params: {
         pid: "123",
-        cid: "456"
-      }
+        cid: "456",
+      },
     };
     res = {
       status: jest.fn().mockReturnThis(),
-      send: jest.fn()
+      send: jest.fn(),
     };
     jest.clearAllMocks();
   });
@@ -1877,25 +2437,27 @@ describe("relatedProductController", () => {
     const mockProducts = [
       { _id: "789", name: "Related 1", category: { _id: "456" } },
       { _id: "101112", name: "Related 2", category: { _id: "456" } },
-      { _id: "131415", name: "Related 3", category: { _id: "456" } }
+      { _id: "131415", name: "Related 3", category: { _id: "456" } },
     ];
 
     productModel.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         limit: jest.fn().mockReturnValue({
-          populate: jest.fn().mockResolvedValue(mockProducts)
-        })
-      })
+          populate: jest.fn().mockResolvedValue(mockProducts),
+        }),
+      }),
     });
 
     // Act
     await relatedProductController(req, res);
 
     // Assert
-    expect(productModel.find().select().limit().populate).toHaveBeenCalledWith("category");
+    expect(productModel.find().select().limit().populate).toHaveBeenCalledWith(
+      "category",
+    );
     expect(res.send).toHaveBeenCalledWith({
       success: true,
-      products: mockProducts
+      products: mockProducts,
     });
   });
 
@@ -1905,25 +2467,27 @@ describe("relatedProductController", () => {
     const allProducts = [
       { _id: "789", name: "Related 1", category: { _id: "456" } },
       { _id: "101112", name: "Related 2", category: { _id: "456" } },
-      { _id: "123", name: "Related 3", category: { _id: "456" } } // Should be excluded
+      { _id: "123", name: "Related 3", category: { _id: "456" } }, // Should be excluded
     ];
 
     // Mock to filter out current product
     productModel.find.mockImplementation((query) => {
       // Filter based on the query
       let filteredProducts = [...allProducts];
-      
+
       // Apply $ne filter (exclude product with ID matching pid)
       if (query._id && query._id.$ne) {
-        filteredProducts = filteredProducts.filter(p => p._id !== query._id.$ne);
+        filteredProducts = filteredProducts.filter(
+          (p) => p._id !== query._id.$ne,
+        );
       }
-      
+
       return {
         select: jest.fn().mockReturnValue({
           limit: jest.fn().mockReturnValue({
-            populate: jest.fn().mockResolvedValue(filteredProducts)
-          })
-        })
+            populate: jest.fn().mockResolvedValue(filteredProducts),
+          }),
+        }),
       };
     });
 
@@ -1933,14 +2497,14 @@ describe("relatedProductController", () => {
     // Assert
     expect(productModel.find).toHaveBeenCalledWith({
       category: "456",
-      _id: { $ne: "123" }
+      _id: { $ne: "123" },
     });
     expect(res.send).toHaveBeenCalledWith({
       success: true,
       products: [
         { _id: "789", name: "Related 1", category: { _id: "456" } },
-        { _id: "101112", name: "Related 2", category: { _id: "456" } }
-      ]
+        { _id: "101112", name: "Related 2", category: { _id: "456" } },
+      ],
     });
   });
 
@@ -1961,10 +2525,12 @@ describe("relatedProductController", () => {
         limit: jest.fn().mockImplementation((limit) => {
           limitValue = limit; // Capture the limit value
           return {
-            populate: jest.fn().mockResolvedValue(allProducts.slice(0, limitValue)) // Apply limit
+            populate: jest
+              .fn()
+              .mockResolvedValue(allProducts.slice(0, limitValue)), // Apply limit
           };
-        })
-      })
+        }),
+      }),
     });
 
     // Act
@@ -1977,8 +2543,8 @@ describe("relatedProductController", () => {
       products: [
         { _id: "789", name: "Related 1", category: { _id: "456" } },
         { _id: "101112", name: "Related 2", category: { _id: "456" } },
-        { _id: "131415", name: "Related 3", category: { _id: "456" } }
-      ]    
+        { _id: "131415", name: "Related 3", category: { _id: "456" } },
+      ],
     });
   });
 
@@ -1987,32 +2553,34 @@ describe("relatedProductController", () => {
     productModel.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         limit: jest.fn().mockReturnValue({
-          populate: jest.fn().mockResolvedValue([])
-        })
-      })
+          populate: jest.fn().mockResolvedValue([]),
+        }),
+      }),
     });
 
     // Act
     await relatedProductController(req, res);
 
     // Assert
-    expect(productModel.find().select().limit().populate).toHaveBeenCalledWith("category");
+    expect(productModel.find().select().limit().populate).toHaveBeenCalledWith(
+      "category",
+    );
     expect(res.send).toHaveBeenCalledWith({
       success: true,
-      products: []
+      products: [],
     });
   });
 
   test("should handle errors gracefully", async () => {
     // Arrange
     const error = new Error("Error while getting related product");
-    
+
     productModel.find.mockReturnValue({
       select: jest.fn().mockReturnValue({
         limit: jest.fn().mockReturnValue({
-          populate: jest.fn().mockRejectedValue(error)
-        })
-      })
+          populate: jest.fn().mockRejectedValue(error),
+        }),
+      }),
     });
 
     // Act
@@ -2023,7 +2591,7 @@ describe("relatedProductController", () => {
     expect(res.send).toHaveBeenCalledWith({
       success: false,
       message: "Error while getting related product",
-      error: error
+      error: error,
     });
   });
 });
@@ -2036,12 +2604,12 @@ describe("productCategoryController", () => {
   beforeEach(() => {
     req = {
       params: {
-        slug: "electronics"
-      }
+        slug: "electronics",
+      },
     };
     res = {
       status: jest.fn().mockReturnThis(),
-      send: jest.fn()
+      send: jest.fn(),
     };
     jest.clearAllMocks();
   });
@@ -2049,11 +2617,18 @@ describe("productCategoryController", () => {
   // Happy path
   test("should return products and status 200 when category exists", async () => {
     // Arrange
-    const mockCategory = { _id: '123', name: 'Electronics', slug: 'electronics' };
-    const mockProducts = [{ _id: '1', name: 'Laptop' }, { _id: '2', name: 'Phone' }];
+    const mockCategory = {
+      _id: "123",
+      name: "Electronics",
+      slug: "electronics",
+    };
+    const mockProducts = [
+      { _id: "1", name: "Laptop" },
+      { _id: "2", name: "Phone" },
+    ];
     categoryModel.findOne.mockResolvedValue(mockCategory);
     productModel.find.mockReturnValue({
-      populate: jest.fn().mockResolvedValue(mockProducts)
+      populate: jest.fn().mockResolvedValue(mockProducts),
     });
 
     // Act
@@ -2064,7 +2639,7 @@ describe("productCategoryController", () => {
     expect(res.send).toHaveBeenCalledWith({
       success: true,
       category: mockCategory,
-      products: mockProducts
+      products: mockProducts,
     });
   });
 
@@ -2072,7 +2647,7 @@ describe("productCategoryController", () => {
     // Arrange
     categoryModel.findOne.mockResolvedValue(null);
     productModel.find.mockReturnValue({
-      populate: jest.fn().mockResolvedValue([])
+      populate: jest.fn().mockResolvedValue([]),
     });
 
     // Act
@@ -2084,7 +2659,7 @@ describe("productCategoryController", () => {
       success: false,
       category: null,
       message: "Category not found",
-      products: []
+      products: [],
     });
   });
 
@@ -2101,7 +2676,7 @@ describe("productCategoryController", () => {
     expect(res.send).toHaveBeenCalledWith({
       success: false,
       error: error,
-      message: "Error While Getting products"
+      message: "Error While Getting products",
     });
   });
 });
