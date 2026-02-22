@@ -185,7 +185,7 @@ const HomePage = () => {
                         setCart([...cart, p]);
                         localStorage.setItem(
                           "cart",
-                          JSON.stringify([...cart, p])
+                          JSON.stringify([...cart, p]),
                         );
                         toast.success("Item Added to cart");
                       }}
