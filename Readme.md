@@ -73,6 +73,11 @@ To download and use the MERN (MongoDB, Express.js, React.js, Node.js) app from G
      git clone <repository_url>
      ```
    - Navigate into the cloned directory.
+   - Copy .env.example to .env:
+
+   ```
+   cp .env.example .env
+   ```
 
 2. **Install Frontend and Backend Dependencies**
    - Run the following command in your project's root directory:
