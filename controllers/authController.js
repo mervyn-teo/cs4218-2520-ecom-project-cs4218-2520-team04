@@ -7,26 +7,14 @@ import JWT from "jsonwebtoken";
 export const registerController = async (req, res) => {
   try {
     const { name, email, password, phone, address, answer } = req.body;
+    //validations
+    if (!name) return res.status(400).send({ message: "Name is Required" });
+    if (!email) return res.status(400).send({ message: "Email is Required" });
+    if (!password) return res.status(400).send({ message: "Password is Required" });
+    if (!phone) return res.status(400).send({ message: "Phone no is Required" });
+    if (!address) return res.status(400).send({ message: "Address is Required" });
+    if (!answer) return res.status(400).send({ message: "Answer is Required" });
 
-    // validations
-    if (!name) {
-      return res.send({ error: "Name is required" });
-    }
-    if (!email) {
-      return res.send({ message: "Email is required" });
-    }
-    if (!password) {
-      return res.send({ message: "Password is required" });
-    }
-    if (!phone) {
-      return res.send({ message: "Phone number is required" });
-    }
-    if (!address) {
-      return res.send({ message: "Address is required" });
-    }
-    if (!answer) {
-      return res.send({ message: "Answer is required" });
-    }
     //check user
     const existingUser = await userModel.findOne({ email });
     //existing user
@@ -36,10 +24,9 @@ export const registerController = async (req, res) => {
         message: "Already registered, please log in",
       });
     }
-
-    // register user
+    //register user
     const hashedPassword = await hashPassword(password);
-
+    //save
     const user = await new userModel({
       name,
       email,
@@ -51,8 +38,14 @@ export const registerController = async (req, res) => {
 
     res.status(201).send({
       success: true,
-      message: "User registered successfully",
-      user,
+      message: "User Register Successfully",
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        address: user.address,
+      }
     });
   } catch (error) {
     console.log(error);
@@ -64,26 +57,25 @@ export const registerController = async (req, res) => {
   }
 };
 
-// POST LOGIN
+//POST LOGIN
 export const loginController = async (req, res) => {
   try {
     const { email, password } = req.body;
-
+    //validation
     if (!email || !password) {
       return res.status(404).send({
         success: false,
         message: "Invalid email or password",
       });
     }
-
+    //check user
     const user = await userModel.findOne({ email });
     if (!user) {
       return res.status(404).send({
         success: false,
-        message: "Email is not registered",
+        message: "Email is not registerd",
       });
     }
-
     const match = await comparePassword(password, user.password);
     if (!match) {
       return res.status(200).send({
@@ -91,11 +83,10 @@ export const loginController = async (req, res) => {
         message: "Invalid password",
       });
     }
-
+    //token
     const token = await JWT.sign({ _id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
     });
-
     res.status(200).send({
       success: true,
       message: "Login successful",
@@ -119,11 +110,11 @@ export const loginController = async (req, res) => {
   }
 };
 
-// FORGOT PASSWORD
+//forgotPasswordController
+
 export const forgotPasswordController = async (req, res) => {
   try {
     const { email, answer, newPassword } = req.body;
-
     if (!email) {
       return res.status(400).send({ message: "Email is required" });
     }
@@ -133,19 +124,17 @@ export const forgotPasswordController = async (req, res) => {
     if (!newPassword) {
       return res.status(400).send({ message: "New password is required" });
     }
-
+    //check
     const user = await userModel.findOne({ email, answer });
-
+    //validation
     if (!user) {
       return res.status(404).send({
         success: false,
         message: "Wrong email or answer",
       });
     }
-
     const hashed = await hashPassword(newPassword);
     await userModel.findByIdAndUpdate(user._id, { password: hashed });
-
     res.status(200).send({
       success: true,
       message: "Password reset successfully",
@@ -160,7 +149,7 @@ export const forgotPasswordController = async (req, res) => {
   }
 };
 
-// TEST CONTROLLER
+//test controller
 export const testController = (req, res) => {
   try {
     res.send("Protected Routes");
@@ -170,28 +159,25 @@ export const testController = (req, res) => {
   }
 };
 
-// UPDATE PROFILE
+//update prfole
 export const updateProfileController = async (req, res) => {
   try {
     const { name, email, password, address, phone } = req.body;
-
     const user = await userModel.findById(req.user._id);
     if (!user) {
-      return res.status(404).send({
+        return res.status(404).send({
         success: false,
         message: "User not found",
-      });
+        });
     }
-
+    //password
     if (password && password.length < 6) {
       return res.status(400).send({
         success: false,
         message: "Password must be at least 6 characters long",
       });
     }
-
     const hashedPassword = password ? await hashPassword(password) : undefined;
-
     const updatedUser = await userModel.findByIdAndUpdate(
       req.user._id,
       {
@@ -203,10 +189,13 @@ export const updateProfileController = async (req, res) => {
       { new: true }
     );
 
+    const userResponse = updatedUser.toObject();
+    delete userResponse.password;
+
     res.status(200).send({
       success: true,
       message: "Profile updated successfully",
-      updatedUser,
+      userResponse,
     });
   } catch (error) {
     console.log(error);
@@ -218,14 +207,13 @@ export const updateProfileController = async (req, res) => {
   }
 };
 
-// ORDERS (USER)
+//orders
 export const getOrdersController = async (req, res) => {
   try {
     const orders = await orderModel
       .find({ buyer: req.user._id })
       .populate("products", "-photo")
       .populate("buyer", "name");
-
     res.json(orders);
   } catch (error) {
     console.log(error);
@@ -236,8 +224,7 @@ export const getOrdersController = async (req, res) => {
     });
   }
 };
-
-// ORDERS (ADMIN)
+//orders
 export const getAllOrdersController = async (req, res) => {
   try {
     const orders = await orderModel
@@ -245,7 +232,6 @@ export const getAllOrdersController = async (req, res) => {
       .populate("products", "-photo")
       .populate("buyer", "name")
       .sort({ createdAt: "-1" });
-
     res.json(orders);
   } catch (error) {
     console.log(error);
@@ -257,18 +243,16 @@ export const getAllOrdersController = async (req, res) => {
   }
 };
 
-// ORDER STATUS
+//order status
 export const orderStatusController = async (req, res) => {
   try {
     const { orderId } = req.params;
     const { status } = req.body;
-
     const orders = await orderModel.findByIdAndUpdate(
       orderId,
       { status },
       { new: true }
     );
-
     res.json(orders);
   } catch (error) {
     console.log(error);

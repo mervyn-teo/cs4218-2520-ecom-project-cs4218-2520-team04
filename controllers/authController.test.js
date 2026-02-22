@@ -19,7 +19,7 @@ jest.mock("../models/orderModel.js");
 jest.mock("../helpers/authHelper.js");
 jest.mock("jsonwebtoken");
 
-describe("Auth Controller Unit Tests", () => {
+describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
     let req, res;
     let testReq;
 
@@ -45,12 +45,14 @@ describe("Auth Controller Unit Tests", () => {
 
 
     // --- REGISTER CONTROLLER TESTS ---
-    describe("registerController", () => {
+    // Written with the aid of Gemini AI
+    describe("registerController", () => { // Mervyn Teo Zi Yan, A0273039A
         it("should return error if name is missing", async () => {
             req.body = testReq;
             delete req.body.name;
             await registerController(req, res);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Name is required" }));
+            expect(res.status).toHaveBeenCalledWith(400);
         });
 
         it("should return error if email is missing", async () => {
@@ -58,6 +60,7 @@ describe("Auth Controller Unit Tests", () => {
             delete req.body.email;
             await registerController(req, res);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ message: "Email is required" }));
+            expect(res.status).toHaveBeenCalledWith(400);
         });
 
         it("should return error if password is missing", async () => {
@@ -65,6 +68,7 @@ describe("Auth Controller Unit Tests", () => {
             delete req.body.password;
             await registerController(req, res);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ message: "Password is required" }));
+            expect(res.status).toHaveBeenCalledWith(400);
         });
 
         it("should return error if phone is missing", async () => {
@@ -72,6 +76,7 @@ describe("Auth Controller Unit Tests", () => {
             delete req.body.phone;
             await registerController(req, res);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ message: "Phone number is required" }));
+            expect(res.status).toHaveBeenCalledWith(400);
         });
 
         it("should return error if address is missing", async () => {
@@ -79,6 +84,7 @@ describe("Auth Controller Unit Tests", () => {
             delete req.body.address;
             await registerController(req, res);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ message: "Address is required" }));
+            expect(res.status).toHaveBeenCalledWith(400);
         });
 
         it("should return error if answer is missing", async () => {
@@ -86,6 +92,8 @@ describe("Auth Controller Unit Tests", () => {
             delete req.body.answer;
             await registerController(req, res);
             expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ message: "Answer is required" }));
+            expect(res.status).toHaveBeenCalledWith(400);
+
         });
 
 
@@ -140,10 +148,32 @@ describe("Auth Controller Unit Tests", () => {
                 message: "Invalid email or password",
             }));
         })
+
+        it("should not return the password hash when a user registers", async () => {
+            req.body = testReq;
+            userModel.findOne.mockResolvedValue(null);
+            hashPassword.mockResolvedValue("hashed_pwd");
+
+            // Mock save to return a simulated DB document
+            const mockDbUser = { ...req.body, _id: "123", password: "hashed_pwd" };
+            userModel.prototype.save = jest.fn().mockResolvedValue(mockDbUser);
+
+            await registerController(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(201);
+
+            // Check the arguments passed to res.send
+            const responsePayload = res.send.mock.calls[0][0];
+
+            // This will fail on the old code because responsePayload.user.password exists
+            expect(responsePayload.user).not.toHaveProperty("password");
+            expect(responsePayload.user.email).toBe("john@example.com");
+        });
     });
 
     // --- LOGIN CONTROLLER TESTS ---
-    describe("loginController", () => {
+    // Written with the aid of Gemini AI
+    describe("loginController", () => { // Mervyn Teo Zi Yan, A0273039A
         it("should login successfully and return a token", async () => {
             req.body = { email: "john@example.com", password: "password123" };
             const mockUser = {
@@ -212,7 +242,8 @@ describe("Auth Controller Unit Tests", () => {
     });
 
     // --- FORGOT PASSWORD TESTS ---
-    describe("forgotPasswordController", () => {
+    // Written with the aid of Gemini AI
+    describe("forgotPasswordController", () => { // Mervyn Teo Zi Yan, A0273039A
         it("should reset password successfully", async () => {
             req.body = { email: "test@test.com", answer: "blue", newPassword: "new123" };
             userModel.findOne.mockResolvedValue({ _id: "user123" });
@@ -277,6 +308,7 @@ describe("Auth Controller Unit Tests", () => {
         });
     });
 
+    describe("testController", () => {
     // --- UPDATE PROFILE TESTS ---
     describe("updateProfileController", () => {
         it("should return 404 if user not found", async () => {
@@ -615,12 +647,12 @@ describe("Auth Controller Unit Tests", () => {
     });
 
     describe("testController", () => {
-        it("should respond with 'Protected Routes'", async () => {
+        it("should respond with 'Protected Routes'", async () => { // Mervyn Teo Zi Yan, A0273039A
             await testController(req, res);
             expect(res.send).toHaveBeenCalledWith("Protected Routes");
         });
 
-        it("should handle errors gracefully", async () => {
+        it("should handle errors gracefully", async () => { // Mervyn Teo Zi Yan, A0273039A
             const error = new Error("Test Error");
 
             res.send.mockImplementationOnce(() => {
