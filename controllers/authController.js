@@ -8,12 +8,12 @@ export const registerController = async (req, res) => {
   try {
     const { name, email, password, phone, address, answer } = req.body;
     //validations
-    if (!name) return res.status(400).send({ message: "Name is Required" });
-    if (!email) return res.status(400).send({ message: "Email is Required" });
-    if (!password) return res.status(400).send({ message: "Password is Required" });
-    if (!phone) return res.status(400).send({ message: "Phone no is Required" });
-    if (!address) return res.status(400).send({ message: "Address is Required" });
-    if (!answer) return res.status(400).send({ message: "Answer is Required" });
+    if (!name) return res.status(400).send({ message: "Name is required" });
+    if (!email) return res.status(400).send({ message: "Email is required" });
+    if (!password) return res.status(400).send({ message: "Password is required" });
+    if (!phone) return res.status(400).send({ message: "Phone number is required" });
+    if (!address) return res.status(400).send({ message: "Address is required" });
+    if (!answer) return res.status(400).send({ message: "Answer is required" });
 
     //check user
     const existingUser = await userModel.findOne({ email });
@@ -38,7 +38,7 @@ export const registerController = async (req, res) => {
 
     res.status(201).send({
       success: true,
-      message: "User Register Successfully",
+      message: "User registered successfully",
       user: {
         _id: user._id,
         name: user.name,
@@ -73,7 +73,7 @@ export const loginController = async (req, res) => {
     if (!user) {
       return res.status(404).send({
         success: false,
-        message: "Email is not registerd",
+        message: "Email is not registered",
       });
     }
     const match = await comparePassword(password, user.password);
@@ -187,10 +187,14 @@ export const updateProfileController = async (req, res) => {
         address: address || user.address,
       },
       { new: true }
-    );
+    )
 
-    const userResponse = updatedUser.toObject();
-    delete userResponse.password;
+    const userResponse = {
+        _id: updatedUser._id,
+        name: updatedUser.name,
+        phone: updatedUser.phone,
+        address: updatedUser.address,
+    }
 
     res.status(200).send({
       success: true,

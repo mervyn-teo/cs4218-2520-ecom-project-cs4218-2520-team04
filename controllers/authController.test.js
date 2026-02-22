@@ -42,8 +42,6 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
         jest.spyOn(console, "log").mockImplementation(() => {});
     });
 
-
-
     // --- REGISTER CONTROLLER TESTS ---
     // Written with the aid of Gemini AI
     describe("registerController", () => { // Mervyn Teo Zi Yan, A0273039A
@@ -51,7 +49,7 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
             req.body = testReq;
             delete req.body.name;
             await registerController(req, res);
-            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ error: "Name is required" }));
+            expect(res.send).toHaveBeenCalledWith(expect.objectContaining({ message: "Name is required" }));
             expect(res.status).toHaveBeenCalledWith(400);
         });
 
@@ -309,8 +307,61 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
     });
 
     describe("testController", () => {
+        it("should respond with 'Protected Routes'", async () => { // Mervyn Teo Zi Yan, A0273039A
+            await testController(req, res);
+            expect(res.send).toHaveBeenCalledWith("Protected Routes");
+        });
+
+        it("should handle errors gracefully", async () => { // Mervyn Teo Zi Yan, A0273039A
+            const error = new Error("Test Error");
+
+            res.send.mockImplementationOnce(() => {
+                throw error;
+            });
+
+            await testController(req, res);
+
+            expect(console.log).toHaveBeenCalledWith(error);
+            expect(res.send).toHaveBeenCalledWith({ error });
+        });
+    });
+
     // --- UPDATE PROFILE TESTS ---
     describe("updateProfileController", () => {
+        it("should not return the password hash when a user updates their profile without changing password", async () => {
+            req.user = { _id: "user123" };
+            req.body = { name: "New Name", password: "", phone: "111", address: "NewAddr" };
+
+            const existingUser = {
+                _id: "user123",
+                name: "Old",
+                password: "oldhash",
+                phone: "999",
+                address: "OldAddr",
+            };
+
+            userModel.findById.mockResolvedValue(existingUser);
+
+            const updatedUser = {
+                ...existingUser,
+                name: "New Name",
+                phone: "111",
+                address: "NewAddr",
+                // password stays oldhash
+                password: "oldhash",
+            };
+
+            userModel.findByIdAndUpdate.mockResolvedValue(updatedUser);
+
+            await updateProfileController(req, res);
+
+            expect(res.status).toHaveBeenCalledWith(200);
+
+            const responsePayload = res.send.mock.calls[0][0];
+
+            expect(responsePayload.userResponse).not.toHaveProperty("password");
+        })
+
         it("should return 404 if user not found", async () => {
             req.user = { _id: "user123" };
             req.body = { name: "New", password: "", phone: "1", address: "A" };
@@ -322,10 +373,10 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
             expect(userModel.findById).toHaveBeenCalledWith("user123");
             expect(res.status).toHaveBeenCalledWith(404);
             expect(res.send).toHaveBeenCalledWith(
-            expect.objectContaining({
-                success: false,
-                message: "User not found",
-            })
+                expect.objectContaining({
+                    success: false,
+                    message: "User not found",
+                })
             );
         });
 
@@ -334,21 +385,21 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
             req.body = { name: "New", password: "123", phone: "1", address: "A" };
 
             userModel.findById.mockResolvedValue({
-            _id: "user123",
-            name: "Old",
-            password: "oldhash",
-            phone: "999",
-            address: "OldAddr",
+                _id: "user123",
+                name: "Old",
+                password: "oldhash",
+                phone: "999",
+                address: "OldAddr",
             });
 
             await updateProfileController(req, res);
 
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.send).toHaveBeenCalledWith(
-            expect.objectContaining({
-                success: false,
-                message: "Password must be at least 6 characters long",
-            })
+                expect.objectContaining({
+                    success: false,
+                    message: "Password must be at least 6 characters long",
+                })
             );
             expect(hashPassword).not.toHaveBeenCalled();
             expect(userModel.findByIdAndUpdate).not.toHaveBeenCalled();
@@ -359,22 +410,20 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
             req.body = { name: "New Name", password: "", phone: "111", address: "NewAddr" };
 
             const existingUser = {
-            _id: "user123",
-            name: "Old",
-            password: "oldhash",
-            phone: "999",
-            address: "OldAddr",
+                _id: "user123",
+                name: "Old",
+                password: "oldhash",
+                phone: "999",
+                address: "OldAddr",
             };
 
             userModel.findById.mockResolvedValue(existingUser);
 
             const updatedUser = {
-            ...existingUser,
-            name: "New Name",
-            phone: "111",
-            address: "NewAddr",
-            // password stays oldhash
-            password: "oldhash",
+                ...existingUser,
+                name: "New Name",
+                phone: "111",
+                address: "NewAddr",
             };
 
             userModel.findByIdAndUpdate.mockResolvedValue(updatedUser);
@@ -384,52 +433,58 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
             expect(hashPassword).not.toHaveBeenCalled();
 
             expect(userModel.findByIdAndUpdate).toHaveBeenCalledWith(
-            "user123",
-            {
-                name: "New Name",
-                password: "oldhash",
-                phone: "111",
-                address: "NewAddr",
-            },
-            { new: true }
+                "user123",
+                {
+                    name: "New Name",
+                    phone: "111",
+                    password: "oldhash", // should fallback to old password
+                    address: "NewAddr",
+                },
+                { new: true }
             );
+
+            const userResponse = {
+                _id: updatedUser._id,
+                name: updatedUser.name,
+                phone: updatedUser.phone,
+                address: updatedUser.address,
+            }
 
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.send).toHaveBeenCalledWith(
-            expect.objectContaining({
-                success: true,
-                message: "Profile updated successfully",
-                updatedUser,
-            })
+                expect.objectContaining({
+                    success: true,
+                    message: "Profile updated successfully",
+                    userResponse,
+                })
             );
         });
 
         it("should update profile and hash password when password provided (>= 6)", async () => {
             req.user = { _id: "user123" };
             req.body = {
-            name: "New Name",
-            password: "newpass123",
-            phone: "111",
-            address: "NewAddr",
+                name: "New Name",
+                password: "newpass123",
+                phone: "111",
+                address: "NewAddr",
             };
 
             const existingUser = {
-            _id: "user123",
-            name: "Old",
-            password: "oldhash",
-            phone: "999",
-            address: "OldAddr",
+                _id: "user123",
+                name: "Old",
+                password: "oldhash",
+                phone: "999",
+                address: "OldAddr",
             };
 
             userModel.findById.mockResolvedValue(existingUser);
             hashPassword.mockResolvedValue("newhash");
 
             const updatedUser = {
-            ...existingUser,
-            name: "New Name",
-            phone: "111",
-            address: "NewAddr",
-            password: "newhash",
+                ...existingUser,
+                name: "New Name",
+                phone: "111",
+                address: "NewAddr",
             };
 
             userModel.findByIdAndUpdate.mockResolvedValue(updatedUser);
@@ -439,23 +494,30 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
             expect(hashPassword).toHaveBeenCalledWith("newpass123");
 
             expect(userModel.findByIdAndUpdate).toHaveBeenCalledWith(
-            "user123",
-            {
-                name: "New Name",
-                password: "newhash",
-                phone: "111",
-                address: "NewAddr",
-            },
-            { new: true }
+                "user123",
+                {
+                    name: "New Name",
+                    phone: "111",
+                    address: "NewAddr",
+                    password: "newhash",
+                },
+                { new: true }
             );
+
+            const userResponse = {
+                _id: updatedUser._id,
+                name: updatedUser.name,
+                phone: updatedUser.phone,
+                address: updatedUser.address,
+            }
 
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.send).toHaveBeenCalledWith(
-            expect.objectContaining({
-                success: true,
-                message: "Profile updated successfully",
-                updatedUser,
-            })
+                expect.objectContaining({
+                    success: true,
+                    message: "Profile updated successfully",
+                    userResponse,
+                })
             );
         });
 
@@ -469,10 +531,10 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
 
             expect(res.status).toHaveBeenCalledWith(400);
             expect(res.send).toHaveBeenCalledWith(
-            expect.objectContaining({
-                success: false,
-                message: "Error while updating profile",
-            })
+                expect.objectContaining({
+                    success: false,
+                    message: "Error while updating profile",
+                })
             );
         });
 
@@ -499,10 +561,10 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
             expect(userModel.findByIdAndUpdate).toHaveBeenCalledWith(
                 "user123",
                 {
-                name: "OldName",      // fallback
-                password: "oldhash",  // fallback
-                phone: "999",         // fallback
-                address: "OldAddr",   // fallback
+                    name: "OldName",      // fallback
+                    password: "oldhash",  // fallback
+                    phone: "999",         // fallback
+                    address: "OldAddr",   // fallback
                 },
                 { new: true }
             );
@@ -510,8 +572,8 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
             expect(res.status).toHaveBeenCalledWith(200);
             expect(res.send).toHaveBeenCalledWith(
                 expect.objectContaining({
-                success: true,
-                message: "Profile updated successfully",
+                    success: true,
+                    message: "Profile updated successfully",
                 })
             );
         });
@@ -535,134 +597,115 @@ describe("Auth Controller Unit Tests", () => { // Mervyn Teo Zi Yan, A0273039A
     describe("Order Controllers", () => {
         describe("getOrdersController", () => {
             it("should return orders for the logged-in user", async () => {
-            req.user = { _id: "user123" };
+                req.user = { _id: "user123" };
 
-            const mockOrders = [{ _id: "o1" }, { _id: "o2" }];
+                const mockOrders = [{ _id: "o1" }, { _id: "o2" }];
 
-            // Mimic: orderModel.find(...).populate(...).populate(...) -> resolves orders
-            const populate2 = jest.fn().mockResolvedValue(mockOrders);
-            const populate1 = jest.fn().mockReturnValue({ populate: populate2 });
+                // Mimic: orderModel.find(...).populate(...).populate(...) -> resolves orders
+                const populate2 = jest.fn().mockResolvedValue(mockOrders);
+                const populate1 = jest.fn().mockReturnValue({ populate: populate2 });
 
-            orderModel.find.mockReturnValue({ populate: populate1 });
+                orderModel.find.mockReturnValue({ populate: populate1 });
 
-            await getOrdersController(req, res);
+                await getOrdersController(req, res);
 
-            expect(orderModel.find).toHaveBeenCalledWith({ buyer: "user123" });
-            expect(populate1).toHaveBeenCalledWith("products", "-photo");
-            expect(populate2).toHaveBeenCalledWith("buyer", "name");
-            expect(res.json).toHaveBeenCalledWith(mockOrders);
+                expect(orderModel.find).toHaveBeenCalledWith({ buyer: "user123" });
+                expect(populate1).toHaveBeenCalledWith("products", "-photo");
+                expect(populate2).toHaveBeenCalledWith("buyer", "name");
+                expect(res.json).toHaveBeenCalledWith(mockOrders);
             });
 
             it("should return 500 if database throws error", async () => {
-            req.user = { _id: "user123" };
+                req.user = { _id: "user123" };
 
-            orderModel.find.mockImplementation(() => {
-                throw new Error("DB Error");
-            });
+                orderModel.find.mockImplementation(() => {
+                    throw new Error("DB Error");
+                });
 
-            await getOrdersController(req, res);
+                await getOrdersController(req, res);
 
-            expect(res.status).toHaveBeenCalledWith(500);
-            expect(res.send).toHaveBeenCalledWith(
-                expect.objectContaining({
-                success: false,
-                message: "Error while getting orders",
-                })
-            );
+                expect(res.status).toHaveBeenCalledWith(500);
+                expect(res.send).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        success: false,
+                        message: "Error while getting orders",
+                    })
+                );
             });
         });
 
         describe("getAllOrdersController", () => {
             it("should return all orders sorted by createdAt desc", async () => {
-            const mockOrders = [{ _id: "o1" }];
+                const mockOrders = [{ _id: "o1" }];
 
-            // Mimic: orderModel.find({}).populate(...).populate(...).sort(...) -> resolves orders
-            const sortMock = jest.fn().mockResolvedValue(mockOrders);
-            const populate2 = jest.fn().mockReturnValue({ sort: sortMock });
-            const populate1 = jest.fn().mockReturnValue({ populate: populate2 });
+                // Mimic: orderModel.find({}).populate(...).populate(...).sort(...) -> resolves orders
+                const sortMock = jest.fn().mockResolvedValue(mockOrders);
+                const populate2 = jest.fn().mockReturnValue({ sort: sortMock });
+                const populate1 = jest.fn().mockReturnValue({ populate: populate2 });
 
-            orderModel.find.mockReturnValue({ populate: populate1 });
+                orderModel.find.mockReturnValue({ populate: populate1 });
 
-            await getAllOrdersController(req, res);
+                await getAllOrdersController(req, res);
 
-            expect(orderModel.find).toHaveBeenCalledWith({});
-            expect(populate1).toHaveBeenCalledWith("products", "-photo");
-            expect(populate2).toHaveBeenCalledWith("buyer", "name");
-            expect(sortMock).toHaveBeenCalledWith({ createdAt: "-1" });
-            expect(res.json).toHaveBeenCalledWith(mockOrders);
+                expect(orderModel.find).toHaveBeenCalledWith({});
+                expect(populate1).toHaveBeenCalledWith("products", "-photo");
+                expect(populate2).toHaveBeenCalledWith("buyer", "name");
+                expect(sortMock).toHaveBeenCalledWith({ createdAt: "-1" });
+                expect(res.json).toHaveBeenCalledWith(mockOrders);
             });
 
             it("should return 500 on error", async () => {
-            orderModel.find.mockImplementation(() => {
-                throw new Error("DB Error");
-            });
+                orderModel.find.mockImplementation(() => {
+                    throw new Error("DB Error");
+                });
 
-            await getAllOrdersController(req, res);
+                await getAllOrdersController(req, res);
 
-            expect(res.status).toHaveBeenCalledWith(500);
-            expect(res.send).toHaveBeenCalledWith(
-                expect.objectContaining({
-                success: false,
-                message: "Error while getting orders",
-                })
-            );
+                expect(res.status).toHaveBeenCalledWith(500);
+                expect(res.send).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        success: false,
+                        message: "Error while getting orders",
+                    })
+                );
             });
         });
 
         describe("orderStatusController", () => {
             it("should update order status and return updated order", async () => {
-            req.params = { orderId: "order123" };
-            req.body = { status: "Shipped" };
+                req.params = { orderId: "order123" };
+                req.body = { status: "Shipped" };
 
-            const updated = { _id: "order123", status: "Shipped" };
-            orderModel.findByIdAndUpdate.mockResolvedValue(updated);
+                const updated = { _id: "order123", status: "Shipped" };
+                orderModel.findByIdAndUpdate.mockResolvedValue(updated);
 
-            await orderStatusController(req, res);
+                await orderStatusController(req, res);
 
-            expect(orderModel.findByIdAndUpdate).toHaveBeenCalledWith(
-                "order123",
-                { status: "Shipped" },
-                { new: true }
-            );
-            expect(res.json).toHaveBeenCalledWith(updated);
+                expect(orderModel.findByIdAndUpdate).toHaveBeenCalledWith(
+                    "order123",
+                    { status: "Shipped" },
+                    { new: true }
+                );
+                expect(res.json).toHaveBeenCalledWith(updated);
             });
 
             it("should return 500 on error", async () => {
-            req.params = { orderId: "order123" };
-            req.body = { status: "Shipped" };
+                req.params = { orderId: "order123" };
+                req.body = { status: "Shipped" };
 
-            orderModel.findByIdAndUpdate.mockRejectedValue(new Error("DB Error"));
+                orderModel.findByIdAndUpdate.mockRejectedValue(new Error("DB Error"));
 
-            await orderStatusController(req, res);
+                await orderStatusController(req, res);
 
-            expect(res.status).toHaveBeenCalledWith(500);
-            expect(res.send).toHaveBeenCalledWith(
-                expect.objectContaining({
-                success: false,
-                message: "Error while updating order",
-                })
-            );
+                expect(res.status).toHaveBeenCalledWith(500);
+                expect(res.send).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        success: false,
+                        message: "Error while updating order",
+                    })
+                );
             });
         });
     });
 
-    describe("testController", () => {
-        it("should respond with 'Protected Routes'", async () => { // Mervyn Teo Zi Yan, A0273039A
-            await testController(req, res);
-            expect(res.send).toHaveBeenCalledWith("Protected Routes");
-        });
-
-        it("should handle errors gracefully", async () => { // Mervyn Teo Zi Yan, A0273039A
-            const error = new Error("Test Error");
-
-            res.send.mockImplementationOnce(() => {
-                throw error;
-            });
-
-            await testController(req, res);
-
-            expect(console.log).toHaveBeenCalledWith(error);
-            expect(res.send).toHaveBeenCalledWith({ error });
-        });
-    });
 });
