@@ -214,10 +214,12 @@ describe("CartPage Component", () => {
 
       // ------------ Assert ------------
       expect(await screen.findByTestId("dropin")).toBeInTheDocument();
-      const makePaymentButton = screen.getByRole("button", {
-        name: "Make Payment",
+      await waitFor(() => {
+        const makePaymentButton = screen.getByRole("button", {
+          name: "Make Payment",
+        });
+        expect(makePaymentButton).toBeEnabled();
       });
-      expect(makePaymentButton).toBeEnabled();
     });
 
     it("shows Update Address button for authenticated user without address and navigates to profile", async () => {
