@@ -4,6 +4,34 @@
 
 [🎉Click me for MS1 CI URL🎉](https://github.com/mervyn-teo/cs4218-2520-ecom-project-cs4218-2520-team04/actions/runs/21817729423/job/62943059474)
 
+
+# Workload Distribution - 5 Member
+
+| Done by | Features | Client Related Files (`/client/src/`) | Server Related Files (`./`) |
+|---|---|---|---|
+| Mervyn Teo Zi Yan | Protected Routes | `context/auth.js` | `helpers/authHelper.js`<br>`middlewares/authMiddleware.js` |
+| Mervyn Teo Zi Yan | Registration | `pages/Auth/Register.js` | **`controllers/authController.js`**<br>1. registerController<br>2. loginController<br>3. forgotPasswordController<br>4. testController |
+| Mervyn Teo Zi Yan | Login | `pages/Auth/Login.js` | |
+| Mervyn Teo Zi Yan | Admin Dashboard | `components/AdminMenu.js`<br>`pages/admin/AdminDashboard.js` | |
+| Tan Wei Lian | Admin Actions | `components/Form/CategoryForm.js`<br>`pages/admin/CreateCategory.js`<br>`pages/admin/CreateProduct.js`<br>`pages/admin/UpdateProduct.js` | **`controllers/categoryController.js`**<br>1. createCategoryController<br>2. updateCategoryController<br>3. deleteCategoryController |
+| Tan Wei Lian | Admin View Orders | `pages/admin/AdminOrders.js` | |
+| Tan Wei Lian | Admin View Products | `pages/admin/Products.js` | **`controllers/productController.js`**<br>1. createProductController<br>2. deleteProductController<br>3. updateProductController |
+| Tan Wei Lian | General | `components/Routes/Private.js`<br>`components/UserMenu.js`<br>`pages/user/Dashboard.js` | `models/userModel.js` |
+| Lu Yixuan, Deborah | Order | `pages/user/Orders.js` | **`controllers/authController.js`**<br>1. updateProfileController<br>2. getOrdersController<br>3. getAllOrdersController<br>4. orderStatusController<br>`models/orderModel.js` |
+| Lu Yixuan, Deborah | Profile | `pages/user/Profile.js` | |
+| Lu Yixuan, Deborah | Admin View Users | `pages/admin/Users.js` | |
+| Lu Yixuan, Deborah | Search | `components/Form/SearchInput.js`<br>`context/search.js`<br>`pages/Search.js` | |
+| Yeo Yi Wen | Product | `pages/ProductDetails.js`<br>`pages/CategoryProduct.js` | **`controllers/productController.js`**<br>1. getProductController<br>2. getSingleProductController<br>3. productPhotoController<br>4. productFiltersController<br>5. productCountController<br>6. productListController<br>7. searchProductController<br>8. relatedProductController<br>9. productCategoryController<br>`models/productModel.js` |
+| Yeo Yi Wen | Contact | `pages/Contact.js` | |
+| Yeo Yi Wen | Policy | `pages/Policy.js` | |
+| Yeo Yi Wen | General | `components/Footer.js`<br>`components/Header.js`<br>`components/Layout.js`<br>`components/Spinner.js`<br>`pages/About.js`<br>`pages/Pagenotfound.js` | `config/db.js` |
+| Teo Kai Xiang | Home | `pages/Homepage.js` | |
+| Teo Kai Xiang | Cart | `context/cart.js`<br>`pages/CartPage.js` | |
+| Teo Kai Xiang | Category | `hooks/useCategory.js`<br>`pages/Categories.js` | **`controllers/categoryController.js`**<br>1. categoryController<br>2. singleCategoryController<br>`models/categoryModel.js` |
+| Teo Kai Xiang | Payment | | **`controllers/productController.js`**<br>1. braintreeTokenController<br>2. brainTreePaymentController |
+
+
+
 ## 1. Project Introduction
 
 Virtual Vault is a full-stack MERN (MongoDB, Express.js, React.js, Node.js) e-commerce website, offering seamless connectivity and user-friendly features. The platform provides a robust framework for online shopping. The website is designed to adapt to evolving business needs and can be efficiently extended.
