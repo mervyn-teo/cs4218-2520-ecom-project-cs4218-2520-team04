@@ -12,11 +12,13 @@ const CategoryProduct = () => {
   useEffect(() => {
     if (params?.slug) getPrductsByCat();
   }, [params?.slug]);
+  
   const getPrductsByCat = async () => {
     try {
       const { data } = await axios.get(
         `/api/v1/product/product-category/${params.slug}`
       );
+      console.log(data);
       setProducts(data?.products);
       setCategory(data?.category);
     } catch (error) {

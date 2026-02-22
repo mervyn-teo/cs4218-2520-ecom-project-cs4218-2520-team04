@@ -1,3 +1,4 @@
+// Mervyn Teo Zi Yan, A0273039A
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react';
 import axios from 'axios';
@@ -43,8 +44,9 @@ window.matchMedia = window.matchMedia || function() {
       addListener: function() {},
       removeListener: function() {}
     };
-  };  
+  };
 
+// Written with the aid of Gemini AI
 describe('Login Component', () => {
     beforeEach(() => {
         jest.clearAllMocks();
@@ -166,6 +168,31 @@ describe('Login Component', () => {
         expect(toast.error).toHaveBeenCalledWith('Something went wrong');
     });
 
+    it('should change loading state on login attempt', async () => {
+        axios.post.mockResolvedValueOnce({ data: { success: false } });
+
+        const {getByPlaceholderText, getByText} = render(
+            <MemoryRouter initialEntries={['/login']}>
+                <Routes><Route path="/login" element={<Login />} /></Routes>
+            </MemoryRouter>
+        );
+
+        const loginBtn = getByText('LOGIN');
+
+        fireEvent.change(getByPlaceholderText('Enter Your Email'), { target: { value: 'test@example.com' } });
+        fireEvent.change(getByPlaceholderText('Enter Your Password'), { target: { value: 'password123' } });
+        fireEvent.click(loginBtn);
+
+        expect(loginBtn).toBeDisabled();
+        expect(loginBtn).toHaveTextContent(/Logging in.../i);
+
+        await waitFor(() => expect(axios.post).toHaveBeenCalled());
+        await waitFor(() => {
+            expect(loginBtn).not.toBeDisabled();
+            expect(loginBtn).toHaveTextContent(/LOGIN/i);
+            }, {timeout: 3000});
+    });
+
     it('should redirect to forgot-password page when forgot button is pressed', () => {
         const { getByText } = render(
             <MemoryRouter initialEntries={['/login']}>
@@ -181,5 +208,28 @@ describe('Login Component', () => {
 
         // Verify that the "Forgot Password Page" text appears, proving navigation occurred
         expect(getByText('Forgot Password Page')).toBeInTheDocument();
+    });
+
+    it('should display the specific backend error message on a 404 response', async () => {
+        // Simulate Axios throwing an error with a backend response payload
+        axios.post.mockRejectedValueOnce({
+            response: {
+                data: { success: false, message: "Email is not registerd" }
+            }
+        });
+
+        const { getByPlaceholderText, getByText } = render(
+            <MemoryRouter initialEntries={['/login']}>
+                <Routes><Route path="/login" element={<Login />} /></Routes>
+            </MemoryRouter>
+        );
+
+        fireEvent.change(getByPlaceholderText('Enter Your Email'), { target: { value: 'wrong@example.com' } });
+        fireEvent.change(getByPlaceholderText('Enter Your Password'), { target: { value: 'password123' } });
+        fireEvent.click(getByText('LOGIN'));
+
+        await waitFor(() => expect(axios.post).toHaveBeenCalled());
+
+        expect(toast.error).toHaveBeenCalledWith("Email is not registerd");
     });
 });

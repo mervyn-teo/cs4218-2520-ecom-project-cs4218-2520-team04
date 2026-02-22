@@ -13,10 +13,12 @@ const Register = () => {
   const [DOB, setDOB] = useState("");
   const [answer, setAnswer] = useState("");
   const navigate = useNavigate();
+  const [loading, setLoading] = useState(false);
 
   // form function
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setLoading(true);
     try {
       const res = await axios.post("/api/v1/auth/register", {
         name,
@@ -35,7 +37,13 @@ const Register = () => {
       }
     } catch (error) {
       console.log(error);
-      toast.error("Something went wrong");
+       if (error.response && error.response.data && error.response.data.message) {
+        toast.error(error.response.data.message);
+       } else {
+        toast.error("Something went wrong");
+       }
+    } finally {
+        setLoading(false);
     }
   };
 
@@ -122,8 +130,8 @@ const Register = () => {
               required
             />
           </div>
-          <button type="submit" className="btn btn-primary">
-            REGISTER
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? "Registering..." : " REGISTER"}
           </button>
         </form>
       </div>

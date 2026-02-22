@@ -9,11 +9,37 @@ const Spinner = ({ path = "login" }) => {
     const interval = setInterval(() => {
       setCount((prevValue) => --prevValue);
     }, 1000);
-    count === 0 && navigate(`/${path}`, {
-        state: location.pathname,
-      });
+    
+    if (count === 0) {
+      // Validate the path
+      if (!path || typeof path !== 'string' || path.trim() === '') {
+        // Empty/blank path
+        navigate('/login', { state: location.pathname });
+      } 
+      else if (path.startsWith('/') || path.endsWith('/')) {
+        // Leading or trailing slash - NOT ALLOWED
+        console.warn(`Path with leading/trailing slash "${path}" detected, redirecting to login`);
+        navigate('/login', { state: location.pathname });
+      }
+      else if (path.includes('//') || path.includes('\\') || path.includes('..')) {
+        // Path contains double slashes, backslashes, or traversal attempts
+        console.warn(`Invalid path "${path}" detected, redirecting to login`);
+        navigate('/login', { state: location.pathname });
+      }
+      else if (!/^[a-zA-Z0-9\-_/]+$/.test(path)) {
+        // Path has invalid characters
+        console.warn(`Invalid characters in path "${path}", redirecting to login`);
+        navigate('/login', { state: location.pathname });
+      }
+      else {
+        // Valid path
+        navigate(`/${path}`, { state: location.pathname });
+      }
+    }
+    
     return () => clearInterval(interval);
-  }, [count, navigate, location]);
+  }, [count, navigate, location, path]); // Added 'path' to dependencies
+
   return (
     <>
       <div
