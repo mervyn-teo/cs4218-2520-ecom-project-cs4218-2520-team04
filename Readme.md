@@ -31,7 +31,13 @@
 | Teo Kai Xiang | Category | `hooks/useCategory.js`<br>`pages/Categories.js` | **`controllers/categoryController.js`**<br>1. categoryController<br>2. singleCategoryController<br>`models/categoryModel.js` |
 | Teo Kai Xiang | Payment | | **`controllers/productController.js`**<br>1. braintreeTokenController<br>2. brainTreePaymentController |
 
+## Testing Workload Distribution (MS2)
 
+| Done by | Test Type | Scope (bullet points) | Test Files |
+|---|---|---|---|
+| Lu Yixuan, Deborah | Integration (Jest + Supertest + MongoMemoryServer) | - Orders endpoints<br>- Profile update endpoint<br>- Admin users endpoint  | `tests/integration/admin/adminUsers.integration.test.js`<br>`tests/integration/auth/orders.integration.test.js`<br>`tests/integration/auth/profile.integration.test.js` |
+| Lu Yixuan, Deborah | UI / E2E (Playwright) | - User orders page flow<br>- User profile update flow<br>- Admin users authorization | `tests/ui/user/user-orders.spec.js`<br>`tests/ui/user/user-profile.spec.js`<br>`tests/ui/admin/admin-users.spec.js` |
+| Lu Yixuan, Deborah | UI / E2E (Playwright) | - Search flow | `tests/ui/public/search.spec.js` |
 
 ## 1. Project Introduction
 
