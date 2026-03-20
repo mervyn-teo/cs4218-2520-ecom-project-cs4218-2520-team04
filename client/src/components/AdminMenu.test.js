@@ -74,14 +74,15 @@ describe('AdminMenu Component', () => {
         });
     });
 
-    it('does not render the commented out Users link', () => {
-        const { queryByText } = render(
+    it('renders the Users link', () => {
+        const { getByText } = render(
             <MemoryRouter>
                 <AdminMenu />
             </MemoryRouter>
         );
 
-        // queryByText returns null if not found, whereas getByText throws an error
-        expect(queryByText('Users')).not.toBeInTheDocument();
+        const usersLink = getByText('Users');
+        expect(usersLink).toBeInTheDocument();
+        expect(usersLink).toHaveAttribute('href', '/dashboard/admin/users');
     });
 });
