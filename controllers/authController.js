@@ -124,6 +124,15 @@ export const forgotPasswordController = async (req, res) => {
     if (!newPassword) {
       return res.status(400).send({ message: "New password is required" });
     }
+
+    // Mervyn Teo Zi Yan - Added type checks for better input validation
+    if (typeof email !== "string" || typeof answer !== "string" || typeof newPassword !== "string") {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid input format. Fields must be text strings."
+      });
+    }
+
     //check
     const user = await userModel.findOne({ email, answer });
     //validation
