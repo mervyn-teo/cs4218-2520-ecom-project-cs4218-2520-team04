@@ -9,9 +9,6 @@
 //  3. Navigate to register from login page → fill form → register → end up on login
 //  4. Register with missing fields → form validation prevents submission
 //
-// Note: Register tests mock the /register API since creating real users in the DB
-// would require cleanup. Login after registration uses real API where possible.
-//
 
 import { test, expect } from "@playwright/test";
 
