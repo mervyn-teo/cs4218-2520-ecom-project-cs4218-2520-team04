@@ -23,27 +23,34 @@ import userModel from "../../../../models/userModel.js";
 // Use a fixed test secret so auth middleware and token signing agree
 process.env.JWT_SECRET = "test-jwt-secret-integration";
 
-const mockBraintreeGateway = {
-  clientToken: { generate: jest.fn() },
-  transaction: { sale: jest.fn() },
-};
-
 // Suppress console.log from middleware (expected JWT errors in auth tests)
 beforeEach(() => {
   jest.spyOn(console, "log").mockImplementation(() => {});
-  mockBraintreeGateway.clientToken.generate.mockReset();
-  mockBraintreeGateway.transaction.sale.mockReset();
+  getMockBraintreeGateway().clientToken.generate.mockReset();
+  getMockBraintreeGateway().transaction.sale.mockReset();
 });
 
 // Mock only braintree (external payment gateway - not under test)
-jest.mock("braintree", () => ({
-  BraintreeGateway: jest.fn().mockImplementation(() => mockBraintreeGateway),
-  Environment: { Sandbox: "sandbox" },
-  __mockGateway: mockBraintreeGateway,
-}));
+jest.mock("braintree", () => {
+  const gateway = {
+    clientToken: { generate: jest.fn() },
+    transaction: { sale: jest.fn() },
+  };
+
+  return {
+    BraintreeGateway: jest.fn().mockImplementation(() => gateway),
+    Environment: { Sandbox: "sandbox" },
+    __mockGateway: gateway,
+  };
+});
 
 // Minimal JPEG bytes for photo upload tests
 const TEST_PHOTO_BUFFER = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10]);
+
+const getMockBraintreeGateway = () => {
+  const { __mockGateway } = jest.requireMock("braintree");
+  return __mockGateway;
+};
 
 const waitForOrderByBuyer = async (buyerId, timeoutMs = 1000) => {
   const deadline = Date.now() + timeoutMs;
@@ -160,7 +167,7 @@ describe("GET /api/v1/product/braintree/token", () => {
       test("returns 500 when Braintree client token generation fails for an authenticated user", async () => {
         // Arrange
         const errorResponse = { message: "token generation failed" };
-        mockBraintreeGateway.clientToken.generate.mockImplementationOnce(
+        getMockBraintreeGateway().clientToken.generate.mockImplementationOnce(
           (payload, callback) => callback(errorResponse, null),
         );
 
@@ -203,7 +210,7 @@ describe("GET /api/v1/product/braintree/token", () => {
       test("forwards the generated client token response as-is", async () => {
         // Arrange
         const responseObj = { clientToken: "token-123" };
-        mockBraintreeGateway.clientToken.generate.mockImplementationOnce(
+        getMockBraintreeGateway().clientToken.generate.mockImplementationOnce(
           (payload, callback) => callback(null, responseObj),
         );
 
@@ -215,10 +222,9 @@ describe("GET /api/v1/product/braintree/token", () => {
         // Assert
         expect(res.status).toBe(200);
         expect(res.body).toEqual(responseObj);
-        expect(mockBraintreeGateway.clientToken.generate).toHaveBeenCalledWith(
-          {},
-          expect.any(Function),
-        );
+        expect(
+          getMockBraintreeGateway().clientToken.generate,
+        ).toHaveBeenCalledWith({}, expect.any(Function));
       });
     });
   });
@@ -311,7 +317,7 @@ describe("POST /api/v1/product/braintree/payment", () => {
         // Arrange
         const errorResponse = { message: "payment failed" };
         const orderCountBeforeRequest = await orderModel.countDocuments({});
-        mockBraintreeGateway.transaction.sale.mockImplementationOnce(
+        getMockBraintreeGateway().transaction.sale.mockImplementationOnce(
           (payload, callback) => callback(errorResponse, null),
         );
 
@@ -392,7 +398,7 @@ describe("POST /api/v1/product/braintree/payment", () => {
           { _id: secondProduct._id.toString(), price: secondProduct.price },
         ];
         const resultObj = { transaction: { id: "txn-1", status: "submitted" } };
-        mockBraintreeGateway.transaction.sale.mockImplementationOnce(
+        getMockBraintreeGateway().transaction.sale.mockImplementationOnce(
           (payload, callback) => callback(null, resultObj),
         );
 
@@ -415,68 +421,6 @@ describe("POST /api/v1/product/braintree/payment", () => {
         ).toEqual([firstProduct._id.toString(), secondProduct._id.toString()]);
         expect(savedOrder.payment).toEqual(resultObj);
         expect(savedOrder.buyer.toString()).toBe(shopper._id.toString());
-      });
-    });
-
-    describe("authenticated request amount calculation", () => {
-      let shopper;
-      let shopperToken;
-      let firstProduct;
-      let secondProduct;
-      let thirdProduct;
-
-      beforeAll(async () => {
-        shopper = await userModel.create({
-          name: "Amount Shopper",
-          email: "amount-shopper@test.com",
-          password: "pass123",
-          phone: "80000005",
-          address: "5 Payment Street",
-          answer: "amount-answer",
-          role: 0,
-        });
-        shopperToken = jwt.sign({ _id: shopper._id }, process.env.JWT_SECRET, {
-          expiresIn: "1h",
-        });
-      });
-
-      afterAll(async () => {
-        await userModel.deleteOne({ email: "amount-shopper@test.com" });
-      });
-
-      beforeEach(async () => {
-        const category = await categoryModel.create({
-          name: "Checkout Amount",
-          slug: "checkout-amount",
-        });
-        [firstProduct, secondProduct, thirdProduct] = await productModel.create(
-          [
-            {
-              name: "Tablet",
-              slug: "tablet",
-              description: "A tablet",
-              price: 29.99,
-              category: category._id,
-              quantity: 2,
-            },
-            {
-              name: "Monitor",
-              slug: "monitor",
-              description: "A monitor",
-              price: 50,
-              category: category._id,
-              quantity: 1,
-            },
-            {
-              name: "Cable",
-              slug: "cable",
-              description: "A cable",
-              price: 20.01,
-              category: category._id,
-              quantity: 8,
-            },
-          ],
-        );
       });
     });
   });
