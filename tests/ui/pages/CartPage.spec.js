@@ -43,6 +43,25 @@ const getFirstCartItem = (page) =>
 const getOrdersTables = (page) =>
   page.locator("table.table");
 
+const getStoredCartSnapshot = (page) =>
+  page.evaluate(() => {
+    const rawCart = window.localStorage.getItem("cart");
+    const parsedCart = rawCart ? JSON.parse(rawCart) : [];
+
+    return parsedCart.map(({ _id, name, price }) => ({
+      _id,
+      name,
+      price,
+    }));
+  });
+
+const buildCartSnapshot = (cartItems) =>
+  cartItems.map(({ _id, name, price }) => ({
+    _id,
+    name,
+    price,
+  }));
+
 const guestCartProduct = {
   _id: "pw-cart-item",
   name: "Playwright Cart Speaker",
@@ -76,9 +95,16 @@ const formatCurrency = (amount) =>
   }).format(amount);
 
 const ensureMongoConnection = async () => {
-  if (mongoose.connection.readyState === 0) {
-    await mongoose.connect(process.env.MONGO_URL);
+  if (mongoose.connection.readyState === 1) {
+    return;
   }
+
+  if (mongoose.connection.readyState === 2) {
+    await mongoose.connection.asPromise();
+    return;
+  }
+
+  await mongoose.connect(process.env.MONGO_URL);
 };
 
 const buildCheckoutSeededProduct = ({
@@ -257,6 +283,17 @@ const goToSeededAuthedCartPage = async (
   await expect(page.locator(".cart-page")).toBeVisible();
 };
 
+const expectCartToRemainIntact = async (page, cartItems) => {
+  await expect(page).toHaveURL(/\/cart$/);
+  await expect(page.locator(".cart-page")).toContainText(cartItems[0].name);
+  await expect(getCartSummary(page).locator("h4")).toContainText(
+    formatCurrency(cartItems.reduce((runningTotal, item) => runningTotal + item.price, 0)),
+  );
+  await expect(getCartBadge(page)).toHaveAttribute("title", String(cartItems.length));
+
+  expect(await getStoredCartSnapshot(page)).toEqual(buildCartSnapshot(cartItems));
+};
+
 test.describe("Functional E2E", () => {
   test("guest shopper can add a product on the home page and see it in the cart page", async ({
     page,
@@ -339,6 +376,96 @@ test.describe("Functional E2E", () => {
     ).toBeVisible();
   });
 
+  test("logged-in shopper keeps the cart when the Braintree token request fails", async ({
+    page,
+  }) => {
+    await page.route("**/api/v1/product/braintree/token", async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "token generation failed" }),
+      });
+    });
+
+    await ensureLoggedInAddressBeforeNavigation(page);
+    await goToSeededCartPage(page);
+
+    await expect(page.getByText(/current address/i)).toBeVisible();
+    await expect(page.locator("[data-braintree-id='wrapper']")).toHaveCount(0);
+    await expect(
+      getCartSummary(page).getByRole("button", { name: /make payment/i }),
+    ).toHaveCount(0);
+    await expectCartToRemainIntact(page, [guestCartProduct]);
+  });
+
+  test("logged-in shopper keeps the cart when requesting a payment method fails", async ({
+    page,
+  }) => {
+    let paymentApiCalls = 0;
+
+    await page.route("**/api/v1/product/braintree/payment", async (route) => {
+      paymentApiCalls += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({ ok: true }),
+      });
+    });
+
+    await ensureLoggedInAddressBeforeNavigation(page);
+    await goToSeededCartPage(page);
+
+    await expect(page.locator("[data-braintree-id='wrapper']")).toBeVisible({
+      timeout: 30000,
+    });
+
+    const makePaymentButton = getCartSummary(page).getByRole("button", {
+      name: /make payment/i,
+    });
+    await makePaymentButton.click();
+    await expect(makePaymentButton).toHaveText(/make payment/i, {
+      timeout: 15000,
+    });
+
+    expect(paymentApiCalls).toBe(0);
+    await expectCartToRemainIntact(page, [guestCartProduct]);
+  });
+
+  test("logged-in shopper keeps the cart when the payment API rejects the checkout", async ({
+    page,
+  }) => {
+    const cartItems = [guestCartProduct];
+
+    await page.route("**/api/v1/product/braintree/payment", async (route) => {
+      await route.fulfill({
+        status: 500,
+        contentType: "application/json",
+        body: JSON.stringify({ message: "payment failed" }),
+      });
+    });
+
+    await ensureLoggedInAddressBeforeNavigation(page);
+    await goToSeededCartPage(page, cartItems);
+
+    await expect(page.locator("[data-braintree-id='wrapper']")).toBeVisible({
+      timeout: 30000,
+    });
+    await fillBraintreeCardForm(page);
+
+    const paymentResponsePromise = waitForPaymentResponse(page);
+    const makePaymentButton = getCartSummary(page).getByRole("button", {
+      name: /make payment/i,
+    });
+    await makePaymentButton.click();
+    const paymentResponse = await paymentResponsePromise;
+
+    expect(paymentResponse.status()).toBe(500);
+    await expect(makePaymentButton).toHaveText(/make payment/i, {
+      timeout: 15000,
+    });
+    await expectCartToRemainIntact(page, cartItems);
+  });
+
   test("logged-in shopper can complete payment and later see the purchased items on the orders page", async ({
     page,
   }) => {
@@ -388,6 +515,8 @@ test.describe("Functional E2E", () => {
         timeout: 60000,
       });
       await expect(page.getByRole("heading", { name: /all orders/i })).toBeVisible();
+      expect(await page.evaluate(() => window.localStorage.getItem("cart"))).toBeNull();
+      await expect(getCartBadge(page)).toHaveAttribute("title", "0");
 
       for (const product of seededData.products) {
         await expect(page.locator(".dashboard")).toContainText(product.name, {

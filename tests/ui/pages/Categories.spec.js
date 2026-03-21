@@ -10,44 +10,97 @@
  */
 
 import { test, expect } from "@playwright/test";
+import mongoose from "mongoose";
+import dotenv from "dotenv";
+import categoryModel from "../../../models/categoryModel.js";
+
+dotenv.config();
 
 test.use({ storageState: { cookies: [], origins: [] } });
+test.afterAll(async () => {
+  if (mongoose.connection.readyState !== 0) {
+    await mongoose.disconnect();
+  }
+});
 
-const getCategoryLinks = (page) =>
-  page.locator(".container .btn.btn-primary");
-
-const goToCategoriesPage = async (page) => {
-  await page.goto("/categories");
-  await expect(page.locator("nav")).toBeVisible();
-
-  const categoryLinks = getCategoryLinks(page);
-  if ((await categoryLinks.count()) === 0) {
-    return 0;
+const ensureMongoConnection = async () => {
+  if (mongoose.connection.readyState === 1) {
+    return;
   }
 
-  await expect(categoryLinks.first()).toBeVisible({ timeout: 10000 });
-  return categoryLinks.count();
+  if (mongoose.connection.readyState === 2) {
+    await mongoose.connection.asPromise();
+    return;
+  }
+
+  await mongoose.connect(process.env.MONGO_URL);
+};
+
+const seedCategoriesPageData = async () => {
+  await ensureMongoConnection();
+
+  const uniqueTag = `pw-categories-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  const categories = await categoryModel.create([
+    {
+      name: `Playwright Audio ${uniqueTag}`,
+      slug: `playwright-audio-${uniqueTag}`,
+    },
+    {
+      name: `Playwright Books ${uniqueTag}`,
+      slug: `playwright-books-${uniqueTag}`,
+    },
+  ]);
+
+  return { categories };
+};
+
+const cleanupSeededCategoriesPageData = async (categoryIds) => {
+  await ensureMongoConnection();
+  await categoryModel.deleteMany({ _id: { $in: categoryIds } });
+};
+
+const getCategoryLinkByName = (page, categoryName) =>
+  page.getByRole("link", { name: categoryName });
+
+const goToCategoriesPage = async (page, firstCategoryName) => {
+  await page.goto("/categories");
+  await expect(page.locator("nav")).toBeVisible();
+  await expect(getCategoryLinkByName(page, firstCategoryName)).toBeVisible({
+    timeout: 10000,
+  });
 };
 
 test.describe("User interface", () => {
+  let seededData;
+
   test.beforeEach(async ({ page }) => {
-    const count = await goToCategoriesPage(page);
-    if (count === 0) test.skip();
+    seededData = await seedCategoriesPageData();
+    await goToCategoriesPage(page, seededData.categories[0].name);
+  });
+
+  test.afterEach(async () => {
+    if (!seededData) return;
+
+    await cleanupSeededCategoriesPageData(
+      seededData.categories.map((category) => category._id),
+    );
+    seededData = null;
   });
 
   test("category links are visible as primary buttons on the page", async ({ page }) => {
-    const categoryLinks = getCategoryLinks(page);
-    expect(await categoryLinks.count()).toBeGreaterThan(0);
-    await expect(categoryLinks.first()).toBeVisible();
+    for (const category of seededData.categories) {
+      await expect(getCategoryLinkByName(page, category.name)).toBeVisible();
+    }
   });
 
   test("each rendered category link points to /category/:slug", async ({ page }) => {
-    const categoryLinks = getCategoryLinks(page);
-    const count = await categoryLinks.count();
-    expect(count).toBeGreaterThan(0);
-
-    for (let index = 0; index < count; index += 1) {
-      await expect(categoryLinks.nth(index)).toHaveAttribute("href", /\/category\/.+/);
+    for (const category of seededData.categories) {
+      await expect(getCategoryLinkByName(page, category.name)).toHaveAttribute(
+        "href",
+        `/category/${category.slug}`,
+      );
     }
   });
 
@@ -57,5 +110,19 @@ test.describe("User interface", () => {
 
   test("Footer is visible on the Categories page", async ({ page }) => {
     await expect(page.locator("div.footer")).toBeVisible();
+  });
+
+  test("clicking a seeded category link opens the real category page", async ({
+    page,
+  }) => {
+    const targetCategory = seededData.categories[0];
+
+    await getCategoryLinkByName(page, targetCategory.name).click();
+
+    await expect(page).toHaveURL(`/category/${targetCategory.slug}`);
+    await expect(page.locator(".category")).toContainText(
+      `Category - ${targetCategory.name}`,
+    );
+    await expect(page.locator(".category")).toContainText("0 result found");
   });
 });

@@ -30,10 +30,18 @@ const getHomeProductCards = (page) =>
     ".home-page .col-md-9 .card:has(button:has-text('ADD TO CART'))",
   );
 
+const getHomeProductCardByName = (page, productName) =>
+  getHomeProductCards(page).filter({
+    has: page.locator(".card-title", { hasText: productName }),
+  });
+
 const getLoadMoreButton = (page) =>
   page.getByRole("button", { name: /loadmore/i });
 
 const getCartBadge = (page) => page.locator("sup.ant-badge-count");
+
+const buildFutureDate = (order) =>
+  new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 50 + order * 1000);
 
 const buildSeededProduct = ({
   name,
@@ -49,8 +57,8 @@ const buildSeededProduct = ({
   category: categoryId,
   quantity: 10,
   shipping: true,
-  createdAt: new Date(Date.now() + order * 1000),
-  updatedAt: new Date(Date.now() + order * 1000),
+  createdAt: buildFutureDate(order),
+  updatedAt: buildFutureDate(order),
 });
 
 const seededPriceRange = [20, 39];
@@ -104,9 +112,16 @@ const getProductSnapshot = async (card) => {
 };
 
 const ensureMongoConnection = async () => {
-  if (mongoose.connection.readyState === 0) {
-    await mongoose.connect(process.env.MONGO_URL);
+  if (mongoose.connection.readyState === 1) {
+    return;
   }
+
+  if (mongoose.connection.readyState === 2) {
+    await mongoose.connection.asPromise();
+    return;
+  }
+
+  await mongoose.connect(process.env.MONGO_URL);
 };
 
 const seedLoadMoreData = async () => {
@@ -194,68 +209,86 @@ const cleanupSeededLoadMoreData = async ({ categoryId, productIds }) => {
   await categoryModel.deleteOne({ _id: categoryId });
 };
 
-const findWorkingFilterCombination = async (
-  page,
-  { requireLoadMore = false } = {},
-) => {
-  await loadHomePage(page);
+const seedFilterScenarioData = async () => {
+  await ensureMongoConnection();
 
-  const categoryCount = await getCategoryOptions(page).count();
-  const priceCount = await getPriceOptions(page).count();
+  const uniqueTag = `pw-home-filter-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
+  const targetCategory = await categoryModel.create({
+    name: `Playwright Electronics ${uniqueTag}`,
+    slug: `playwright-electronics-${uniqueTag}`,
+  });
+  const secondaryCategory = await categoryModel.create({
+    name: `Playwright Books ${uniqueTag}`,
+    slug: `playwright-books-${uniqueTag}`,
+  });
 
-  if (categoryCount === 0 || priceCount === 0) {
-    return null;
-  }
+  const insertedProducts = await productModel.create([
+    buildSeededProduct({
+      name: `Signal Keyboard ${uniqueTag}`,
+      price: 25,
+      categoryId: targetCategory._id,
+      slugPrefix: `${uniqueTag}-signal`,
+      order: 1,
+    }),
+    buildSeededProduct({
+      name: `Vector Mouse ${uniqueTag}`,
+      price: 39,
+      categoryId: targetCategory._id,
+      slugPrefix: `${uniqueTag}-vector`,
+      order: 2,
+    }),
+    buildSeededProduct({
+      name: `Atlas Monitor ${uniqueTag}`,
+      price: 55,
+      categoryId: targetCategory._id,
+      slugPrefix: `${uniqueTag}-atlas`,
+      order: 3,
+    }),
+    buildSeededProduct({
+      name: `Paper Trail ${uniqueTag}`,
+      price: 30,
+      categoryId: secondaryCategory._id,
+      slugPrefix: `${uniqueTag}-paper`,
+      order: 4,
+    }),
+  ]);
 
-  for (
-    let categoryIndex = 0;
-    categoryIndex < categoryCount;
-    categoryIndex += 1
-  ) {
-    await loadHomePage(page);
+  const productsByName = Object.fromEntries(
+    insertedProducts.map((product) => [product.name, product]),
+  );
+  const targetCategoryProducts = [
+    productsByName[`Signal Keyboard ${uniqueTag}`],
+    productsByName[`Vector Mouse ${uniqueTag}`],
+    productsByName[`Atlas Monitor ${uniqueTag}`],
+  ];
+  const priceRangeProducts = [
+    productsByName[`Signal Keyboard ${uniqueTag}`],
+    productsByName[`Vector Mouse ${uniqueTag}`],
+    productsByName[`Paper Trail ${uniqueTag}`],
+  ];
+  const combinedFilterProducts = [
+    productsByName[`Signal Keyboard ${uniqueTag}`],
+    productsByName[`Vector Mouse ${uniqueTag}`],
+  ];
 
-    const categoryOptions = getCategoryOptions(page);
-    const priceOptions = getPriceOptions(page);
+  return {
+    targetCategory,
+    secondaryCategory,
+    targetCategoryProducts,
+    priceRangeProducts,
+    combinedFilterProducts,
+    outOfRangeProduct: productsByName[`Atlas Monitor ${uniqueTag}`],
+    crossCategoryProduct: productsByName[`Paper Trail ${uniqueTag}`],
+    allProducts: insertedProducts,
+  };
+};
 
-    const categoryLabel =
-      (await categoryOptions.nth(categoryIndex).textContent())?.trim() || "";
-
-    const categoryResponsePromise = waitForFilterResponse(page);
-    await categoryOptions.nth(categoryIndex).click();
-    const categoryResponse = await categoryResponsePromise;
-    expect(categoryResponse.ok()).toBeTruthy();
-
-    for (let priceIndex = 0; priceIndex < priceCount; priceIndex += 1) {
-      const priceLabel =
-        (await priceOptions.nth(priceIndex).textContent())?.trim() || "";
-
-      const priceResponsePromise = waitForFilterResponse(page);
-      await priceOptions.nth(priceIndex).click();
-      const priceResponse = await priceResponsePromise;
-      expect(priceResponse.ok()).toBeTruthy();
-
-      const responseData = await priceResponse.json();
-      const products = responseData?.products || [];
-      const total = responseData?.total ?? products.length;
-
-      if (
-        products.length > 0 &&
-        (!requireLoadMore || total > products.length)
-      ) {
-        const requestPayload = priceResponse.request().postDataJSON();
-        return {
-          categoryLabel,
-          priceLabel,
-          checked: requestPayload?.checked || [],
-          radio: requestPayload?.radio || [],
-          products,
-          total,
-        };
-      }
-    }
-  }
-
-  return null;
+const cleanupSeededFilterData = async ({ categoryIds, productIds }) => {
+  await ensureMongoConnection();
+  await productModel.deleteMany({ _id: { $in: productIds } });
+  await categoryModel.deleteMany({ _id: { $in: categoryIds } });
 };
 
 test.describe("Functional E2E", () => {
@@ -264,25 +297,50 @@ test.describe("Functional E2E", () => {
   }) => {
     test.slow();
 
-    const filterCombination = await findWorkingFilterCombination(page);
-    if (!filterCombination) {
-      return test.skip();
-    }
+    const seededData = await seedFilterScenarioData();
 
-    const productCards = getHomeProductCards(page);
-    await expect(productCards).toHaveCount(filterCombination.products.length, {
-      timeout: 10000,
-    });
+    try {
+      await loadHomePage(page);
 
-    for (const product of filterCombination.products) {
-      await expect(page.locator(".home-page .col-md-9")).toContainText(
-        product.name,
+      const categoryResponsePromise = waitForFilterResponse(page);
+      await getCategoryOptions(page)
+        .getByText(seededData.targetCategory.name)
+        .click();
+      const categoryResponse = await categoryResponsePromise;
+      expect(categoryResponse.ok()).toBeTruthy();
+
+      const priceResponsePromise = waitForFilterResponse(page);
+      await getPriceOptions(page).getByText("$20 to 39").click();
+      const priceResponse = await priceResponsePromise;
+      expect(priceResponse.ok()).toBeTruthy();
+
+      const productCards = getHomeProductCards(page);
+      await expect(productCards).toHaveCount(
+        seededData.combinedFilterProducts.length,
+        {
+          timeout: 10000,
+        },
       );
-    }
 
-    await expect(getLoadMoreButton(page)).toHaveCount(
-      filterCombination.total > filterCombination.products.length ? 1 : 0,
-    );
+      for (const product of seededData.combinedFilterProducts) {
+        await expect(getProductPanel(page)).toContainText(product.name);
+      }
+
+      await expect(getProductPanel(page)).not.toContainText(
+        seededData.outOfRangeProduct.name,
+      );
+      await expect(getProductPanel(page)).not.toContainText(
+        seededData.crossCategoryProduct.name,
+      );
+    } finally {
+      await cleanupSeededFilterData({
+        categoryIds: [
+          seededData.targetCategory._id,
+          seededData.secondaryCategory._id,
+        ],
+        productIds: seededData.allProducts.map((product) => product._id),
+      });
+    }
   });
 
   test("adds filtered products to cart and shows them in the cart summary", async ({
@@ -290,49 +348,154 @@ test.describe("Functional E2E", () => {
   }) => {
     test.slow();
 
-    const filterCombination = await findWorkingFilterCombination(page);
-    if (!filterCombination) {
-      return test.skip();
-    }
+    const seededData = await seedFilterScenarioData();
 
-    const productCards = getHomeProductCards(page);
-    await expect(productCards).toHaveCount(filterCombination.products.length, {
-      timeout: 10000,
-    });
+    try {
+      await loadHomePage(page);
 
-    const addCount = Math.min(await productCards.count(), 2);
-    if (addCount === 0) {
-      return test.skip();
-    }
+      const categoryResponsePromise = waitForFilterResponse(page);
+      await getCategoryOptions(page)
+        .getByText(seededData.targetCategory.name)
+        .click();
+      const categoryResponse = await categoryResponsePromise;
+      expect(categoryResponse.ok()).toBeTruthy();
 
-    const addedProducts = [];
-    let expectedTotal = 0;
+      const priceResponsePromise = waitForFilterResponse(page);
+      await getPriceOptions(page).getByText("$20 to 39").click();
+      const priceResponse = await priceResponsePromise;
+      expect(priceResponse.ok()).toBeTruthy();
 
-    for (let index = 0; index < addCount; index += 1) {
-      const card = productCards.nth(index);
-      const product = await getProductSnapshot(card);
-
-      addedProducts.push(product.name);
-      expectedTotal += product.price;
-
-      await card.getByRole("button", { name: "ADD TO CART" }).click();
-      await expect(getCartBadge(page)).toHaveAttribute(
-        "title",
-        String(index + 1),
+      const productCards = getHomeProductCards(page);
+      await expect(productCards).toHaveCount(
+        seededData.combinedFilterProducts.length,
+        {
+          timeout: 10000,
+        },
       );
+
+      const addedProducts = [];
+      let expectedTotal = 0;
+
+      for (let index = 0; index < seededData.combinedFilterProducts.length; index += 1) {
+        const card = productCards.nth(index);
+        const product = await getProductSnapshot(card);
+
+        addedProducts.push(product.name);
+        expectedTotal += product.price;
+
+        await card.getByRole("button", { name: "ADD TO CART" }).click();
+        await expect(getCartBadge(page)).toHaveAttribute(
+          "title",
+          String(index + 1),
+        );
+      }
+
+      await page.locator("a[href='/cart']").click();
+      await expect(page).toHaveURL("/cart");
+
+      for (const productName of addedProducts) {
+        await expect(page.locator(".cart-page")).toContainText(productName);
+      }
+
+      await expect(page.locator(".cart-summary")).toContainText("Total :");
+      await expect(page.locator(".cart-summary h4")).toContainText(
+        formatCurrency(expectedTotal),
+      );
+    } finally {
+      await cleanupSeededFilterData({
+        categoryIds: [
+          seededData.targetCategory._id,
+          seededData.secondaryCategory._id,
+        ],
+        productIds: seededData.allProducts.map((product) => product._id),
+      });
     }
+  });
 
-    await page.locator("a[href='/cart']").click();
-    await expect(page).toHaveURL("/cart");
+  test("RESET FILTERS restores the unfiltered seeded products after category and price filters are applied", async ({
+    page,
+  }) => {
+    test.slow();
 
-    for (const productName of addedProducts) {
-      await expect(page.locator(".cart-page")).toContainText(productName);
+    const seededData = await seedFilterScenarioData();
+
+    try {
+      await loadHomePage(page);
+
+      const categoryResponsePromise = waitForFilterResponse(page);
+      await getCategoryOptions(page)
+        .getByText(seededData.targetCategory.name)
+        .click();
+      const categoryResponse = await categoryResponsePromise;
+      expect(categoryResponse.ok()).toBeTruthy();
+
+      const priceResponsePromise = waitForFilterResponse(page);
+      await getPriceOptions(page).getByText("$20 to 39").click();
+      const priceResponse = await priceResponsePromise;
+      expect(priceResponse.ok()).toBeTruthy();
+
+      await expect(getProductPanel(page)).not.toContainText(
+        seededData.outOfRangeProduct.name,
+      );
+
+      await Promise.all([
+        page.waitForLoadState("domcontentloaded"),
+        getFilterPanel(page).getByRole("button", { name: /reset filters/i }).click(),
+      ]);
+
+      await expect(
+        page.getByRole("checkbox", { name: seededData.targetCategory.name }),
+      ).not.toBeChecked();
+      await expect(page.getByRole("radio", { name: "$20 to 39" })).not.toBeChecked();
+
+      for (const product of seededData.allProducts) {
+        await expect(getProductPanel(page)).toContainText(product.name);
+      }
+    } finally {
+      await cleanupSeededFilterData({
+        categoryIds: [
+          seededData.targetCategory._id,
+          seededData.secondaryCategory._id,
+        ],
+        productIds: seededData.allProducts.map((product) => product._id),
+      });
     }
+  });
 
-    await expect(page.locator(".cart-summary")).toContainText("Total :");
-    await expect(page.locator(".cart-summary h4")).toContainText(
-      formatCurrency(expectedTotal),
-    );
+  test("More Details opens the seeded product details page from the homepage", async ({
+    page,
+  }) => {
+    test.slow();
+
+    const seededData = await seedFilterScenarioData();
+    const targetProduct = seededData.combinedFilterProducts[0];
+
+    try {
+      await loadHomePage(page);
+
+      const targetCard = getHomeProductCardByName(page, targetProduct.name);
+      await expect(targetCard).toHaveCount(1, { timeout: 10000 });
+      await targetCard.getByRole("button", { name: "More Details" }).click();
+
+      await expect(page).toHaveURL(new RegExp(`/product/${targetProduct.slug}$`));
+      await expect(
+        page.getByRole("heading", { name: /product details/i }),
+      ).toBeVisible();
+      await expect(page.locator(".product-details-info")).toContainText(
+        targetProduct.name,
+      );
+      await expect(page.locator(".product-details-info")).toContainText(
+        seededData.targetCategory.name,
+      );
+    } finally {
+      await cleanupSeededFilterData({
+        categoryIds: [
+          seededData.targetCategory._id,
+          seededData.secondaryCategory._id,
+        ],
+        productIds: seededData.allProducts.map((product) => product._id),
+      });
+    }
   });
 
   test("Load more appends the next page of unfiltered products", async ({
