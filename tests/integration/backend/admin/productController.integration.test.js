@@ -3,7 +3,7 @@
 //
 // Integration tests for product routes + controller + middleware + model.
 // Tests go through the full HTTP stack using supertest:
-//   route → requireSignIn → isAdmin → formidable → productController → productModel/categoryModel/orderModel
+//   route -> requireSignIn -> isAdmin -> formidable -> productController -> productModel/categoryModel/orderModel
 // This verifies:
 //   - Auth middleware blocks unauthenticated / non-admin requests on protected routes
 //   - formidable correctly parses multipart form data (fields + file upload)
@@ -26,7 +26,7 @@ process.env.JWT_SECRET = "test-jwt-secret-integration";
 // Suppress console.log from middleware (expected JWT errors in auth tests)
 beforeEach(() => jest.spyOn(console, "log").mockImplementation(() => {}));
 
-// Mock only braintree (external payment gateway — not under test)
+// Mock only braintree (external payment gateway - not under test)
 jest.mock("braintree", () => ({
   BraintreeGateway: jest.fn().mockImplementation(() => ({})),
   Environment: { Sandbox: "sandbox" },
@@ -42,7 +42,7 @@ beforeAll(async () => {
   mongod = await MongoMemoryServer.create();
   await mongoose.connect(mongod.getUri());
 
-  // Minimal Express app — only product routes (includes formidable middleware)
+  // Minimal Express app - only product routes (includes formidable middleware)
   app = express();
   app.use(express.json());
   app.use("/api/v1/product", productRoutes);
@@ -61,10 +61,10 @@ afterEach(async () => {
   await orderModel.deleteMany({});
 });
 
-// ─── Auth middleware integration ────────────────────────────────────────────
+// --- Auth middleware integration ------------------------------------------------
 
 // Tan Wei Lian, A0269750U
-describe("Auth middleware — protected product routes", () => {
+describe("Auth middleware - protected product routes", () => {
   test("POST /create-product returns 401 with no Authorization header", async () => {
     const res = await request(app)
       .post("/api/v1/product/create-product")
@@ -92,10 +92,54 @@ describe("Auth middleware — protected product routes", () => {
   });
 });
 
-// ─── Admin product CRUD ─────────────────────────────────────────────────────
+// Teo Kai Xiang, A0272558U
+// Written by GPT 5.4 based on test plans written by me. Reviewed after
+describe("Negative path cases - protected payment route", () => {
+  test("POST /braintree/payment rejects an unauthenticated request and does not persist an order", async () => {
+    // Arrange
+    const category = await categoryModel.create({
+      name: "Electronics",
+      slug: "electronics",
+    });
+    const product = await productModel.create({
+      name: "Laptop",
+      slug: "laptop",
+      description: "A fast laptop",
+      price: 999,
+      category: category._id,
+      quantity: 3,
+    });
+    const orderCountBeforeRequest = await orderModel.countDocuments({});
+
+    // Act
+    const res = await request(app)
+      .post("/api/v1/product/braintree/payment")
+      .send({
+        nonce: "fake-valid-nonce",
+        cart: [
+          {
+            _id: product._id.toString(),
+            name: product.name,
+            price: product.price,
+            quantity: 1,
+          },
+        ],
+      });
+
+    // Assert
+    expect(res.status).toBe(401);
+    expect(res.body).toEqual({
+      success: false,
+      message: "Invalid or expired token",
+    });
+    expect(await orderModel.countDocuments({})).toBe(orderCountBeforeRequest);
+  });
+});
+
+// --- Admin product CRUD ---------------------------------------------------------
 
 // Tan Wei Lian, A0269750U
-describe("Product CRUD — admin authenticated requests via full HTTP stack", () => {
+describe("Product CRUD - admin authenticated requests via full HTTP stack", () => {
   let adminToken;
   let testCategory;
 
@@ -387,7 +431,7 @@ describe("Product CRUD — admin authenticated requests via full HTTP stack", ()
 });
 
 // Tan Wei Lian, A0269750U
-describe("Full product lifecycle via HTTP stack — create → update → delete", () => {
+describe("Full product lifecycle via HTTP stack - create -> update -> delete", () => {
   let adminToken;
   let category;
 
@@ -412,7 +456,7 @@ describe("Full product lifecycle via HTTP stack — create → update → delete
     category = await categoryModel.create({ name: "Clothing", slug: "clothing" });
   });
 
-  test("create → update → delete through full HTTP + middleware + DB", async () => {
+  test("create -> update -> delete through full HTTP + middleware + DB", async () => {
     // Step 1: Create
     const createRes = await request(app)
       .post("/api/v1/product/create-product")
