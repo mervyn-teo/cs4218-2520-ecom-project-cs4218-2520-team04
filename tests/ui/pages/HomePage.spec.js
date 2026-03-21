@@ -35,7 +35,13 @@ const getLoadMoreButton = (page) =>
 
 const getCartBadge = (page) => page.locator("sup.ant-badge-count");
 
-const buildSeededProduct = ({ name, price, categoryId, slugPrefix, order }) => ({
+const buildSeededProduct = ({
+  name,
+  price,
+  categoryId,
+  slugPrefix,
+  order,
+}) => ({
   name,
   slug: `${slugPrefix}-${order}`,
   description: `${name} description for homepage pagination coverage.`,
@@ -329,7 +335,9 @@ test.describe("Functional E2E", () => {
     );
   });
 
-  test("appends the next page of unfiltered products", async ({ page }) => {
+  test("Load more appends the next page of unfiltered products", async ({
+    page,
+  }) => {
     test.slow();
 
     const seededData = await seedLoadMoreData();
@@ -381,7 +389,7 @@ test.describe("Functional E2E", () => {
     }
   });
 
-  test("keeps category and price filters while loading more filtered products", async ({
+  test("Load more adheres to the category and price filters while loading more filtered products", async ({
     page,
   }) => {
     test.slow();
@@ -395,7 +403,9 @@ test.describe("Functional E2E", () => {
       const expectedFilteredPageTwoProducts = seededData.products.slice(6);
 
       const categoryResponsePromise = waitForFilterResponse(page);
-      await getCategoryOptions(page).getByText(seededData.category.name).click();
+      await getCategoryOptions(page)
+        .getByText(seededData.category.name)
+        .click();
       const categoryResponse = await categoryResponsePromise;
       expect(categoryResponse.ok()).toBeTruthy();
 
@@ -429,7 +439,9 @@ test.describe("Functional E2E", () => {
       const responseData = await loadMoreResponse.json();
       const appendedProducts = responseData?.products || [];
 
-      expect(appendedProducts.length).toBe(expectedFilteredPageTwoProducts.length);
+      expect(appendedProducts.length).toBe(
+        expectedFilteredPageTwoProducts.length,
+      );
 
       await expect(productCards).toHaveCount(
         expectedFilteredPageOneProducts.length + appendedProducts.length,
