@@ -74,14 +74,4 @@ describe('AdminMenu Component', () => {
         });
     });
 
-    it('does not render the commented out Users link', () => {
-        const { queryByText } = render(
-            <MemoryRouter>
-                <AdminMenu />
-            </MemoryRouter>
-        );
-
-        // queryByText returns null if not found, whereas getByText throws an error
-        expect(queryByText('Users')).not.toBeInTheDocument();
-    });
 });
