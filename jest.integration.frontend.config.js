@@ -14,7 +14,7 @@ export default {
   modulePaths: ["<rootDir>/client/node_modules"],
   transformIgnorePatterns: ["/node_modules/(?!(styleMock\\.js)$)"],
   testMatch: [
-    "<rootDir>/tests/integration/frontend/*.integration.test.js",
+    "<rootDir>/tests/integration/frontend/**/*.integration.test.js",
     "<rootDir>/client/src/pages/admin/*.integration.test.js",
     "<rootDir>/client/src/components/*.integration.test.js",
     "<rootDir>/client/src/pages/*.integration.test.js"
