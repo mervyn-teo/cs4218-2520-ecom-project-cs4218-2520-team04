@@ -360,7 +360,11 @@ describe("[Integration] Home shopper flows", () => {
 
       // Assert
       await waitFor(() => {
+        const cartBadge = document.querySelector("sup.ant-badge-count");
+
         expect(screen.getByTestId("cart-context-count")).toHaveTextContent("1");
+        expect(cartBadge).toBeInTheDocument();
+        expect(cartBadge).toHaveAttribute("title", "1");
         expect(JSON.parse(localStorage.getItem("cart"))).toEqual(
           expect.arrayContaining([
             expect.objectContaining({
