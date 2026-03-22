@@ -43,7 +43,7 @@ module.exports = defineConfig({
         ...devices["Desktop Chrome"],
         storageState: "playwright/.auth.json",
       },
-      dependencies: ["auth-setup"],
+      dependencies: ["auth-setup", "user-setup"],
     },
   ],
 

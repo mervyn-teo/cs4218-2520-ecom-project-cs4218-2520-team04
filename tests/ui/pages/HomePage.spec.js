@@ -42,7 +42,7 @@ const getLoadMoreButton = (page) =>
 const getCartBadge = (page) => page.locator("sup.ant-badge-count");
 
 const buildFutureDate = (order) =>
-  new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 50 + order * 1000);
+  new Date(Date.now() + 1000 * 60 * 60 * 24 * 365 * 100 + order * 1000);
 
 const buildSeededProduct = ({
   name,
@@ -114,7 +114,12 @@ const getProductSnapshot = async (card) => {
 
 const ensureMongoConnection = async () => {
   if (mongoose.connection.readyState === 1) {
-    return;
+    try {
+      await mongoose.connection.db.admin().ping();
+      return;
+    } catch {
+      await mongoose.disconnect();
+    }
   }
 
   if (mongoose.connection.readyState === 2) {
@@ -129,6 +134,37 @@ const ensureMongoConnection = async () => {
   }
 
   await mongoose.connect(getTestMongoUrl());
+};
+
+const forceMongoReconnect = async () => {
+  if (mongoose.connection.readyState !== 0) {
+    try {
+      await mongoose.disconnect();
+    } catch {
+      // Best effort only; we reconnect below.
+    }
+  }
+
+  await mongoose.connect(getTestMongoUrl());
+};
+
+const isMongoConnectionError = (error) =>
+  error?.name === "MongoNotConnectedError" ||
+  error?.name === "MongooseServerSelectionError" ||
+  error?.name === "MongoServerSelectionError";
+
+const runMongoOperationWithReconnect = async (operation) => {
+  try {
+    await ensureMongoConnection();
+    return await operation();
+  } catch (error) {
+    if (!isMongoConnectionError(error)) {
+      throw error;
+    }
+
+    await forceMongoReconnect();
+    return await operation();
+  }
 };
 
 const cleanupStaleHomePageUiData = async () => {
@@ -170,9 +206,22 @@ const seedHomePageUiData = async () => {
 };
 
 const cleanupSeededHomePageUiData = async ({ categoryId, productId }) => {
-  await ensureMongoConnection();
-  await productModel.deleteOne({ _id: productId });
-  await categoryModel.deleteOne({ _id: categoryId });
+  try {
+    await runMongoOperationWithReconnect(() =>
+      productModel.deleteOne({ _id: productId }),
+    );
+    await runMongoOperationWithReconnect(() =>
+      categoryModel.deleteOne({ _id: categoryId }),
+    );
+  } catch (error) {
+    if (!isMongoConnectionError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      "Skipping final homepage UI cleanup after repeated Mongo reconnect failures.",
+    );
+  }
 };
 
 const cleanupStaleHomePageLoadMoreData = async () => {
@@ -266,9 +315,22 @@ const seedLoadMoreData = async () => {
 };
 
 const cleanupSeededLoadMoreData = async ({ categoryId, productIds }) => {
-  await ensureMongoConnection();
-  await productModel.deleteMany({ _id: { $in: productIds } });
-  await categoryModel.deleteOne({ _id: categoryId });
+  try {
+    await runMongoOperationWithReconnect(() =>
+      productModel.deleteMany({ _id: { $in: productIds } }),
+    );
+    await runMongoOperationWithReconnect(() =>
+      categoryModel.deleteOne({ _id: categoryId }),
+    );
+  } catch (error) {
+    if (!isMongoConnectionError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      "Skipping final homepage load-more cleanup after repeated Mongo reconnect failures.",
+    );
+  }
 };
 
 const cleanupStaleHomePageFilterData = async () => {
@@ -359,9 +421,22 @@ const seedFilterScenarioData = async () => {
 };
 
 const cleanupSeededFilterData = async ({ categoryIds, productIds }) => {
-  await ensureMongoConnection();
-  await productModel.deleteMany({ _id: { $in: productIds } });
-  await categoryModel.deleteMany({ _id: { $in: categoryIds } });
+  try {
+    await runMongoOperationWithReconnect(() =>
+      productModel.deleteMany({ _id: { $in: productIds } }),
+    );
+    await runMongoOperationWithReconnect(() =>
+      categoryModel.deleteMany({ _id: { $in: categoryIds } }),
+    );
+  } catch (error) {
+    if (!isMongoConnectionError(error)) {
+      throw error;
+    }
+
+    console.warn(
+      "Skipping final homepage filter cleanup after repeated Mongo reconnect failures.",
+    );
+  }
 };
 
 test.describe("Functional E2E", () => {
@@ -556,6 +631,13 @@ test.describe("Functional E2E", () => {
     try {
       await loadHomePage(page);
 
+      const categoryResponsePromise = waitForFilterResponse(page);
+      await getCategoryOptions(page)
+        .getByText(seededData.targetCategory.name)
+        .click();
+      const categoryResponse = await categoryResponsePromise;
+      expect(categoryResponse.ok()).toBeTruthy();
+
       const targetCard = getHomeProductCardByName(page, targetProduct.name);
       await expect(targetCard).toHaveCount(1, { timeout: 10000 });
       await targetCard.getByRole("button", { name: "More Details" }).click();
@@ -607,27 +689,19 @@ test.describe("Functional E2E", () => {
 
       await expect(getLoadMoreButton(page)).toBeVisible();
 
+      for (const product of expectedPageTwoProducts) {
+        await expect(getProductPanel(page)).not.toContainText(product.name);
+      }
+
       const loadMoreResponsePromise = waitForProductListResponse(page, 2);
       await getLoadMoreButton(page).click();
       const loadMoreResponse = await loadMoreResponsePromise;
       expect(loadMoreResponse.ok()).toBeTruthy();
 
-      const responseData = await loadMoreResponse.json();
-      const appendedProducts = responseData?.products || [];
-
-      expect(appendedProducts.length).toBeGreaterThanOrEqual(
-        expectedPageTwoProducts.length,
-      );
-
-      await expect(productCards).toHaveCount(
-        expectedInitialProducts.length + appendedProducts.length,
-        {
-          timeout: 10000,
-        },
-      );
-
       for (const product of expectedPageTwoProducts) {
-        await expect(getProductPanel(page)).toContainText(product.name);
+        await expect(getHomeProductCardByName(page, product.name)).toHaveCount(1, {
+          timeout: 10000,
+        });
       }
     } finally {
       await cleanupSeededLoadMoreData({

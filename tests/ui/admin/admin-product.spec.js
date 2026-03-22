@@ -95,7 +95,7 @@ test.describe.serial("Admin product CRUD — create → update → delete flow",
     await page.locator(".ant-select").filter({ hasText: "Select Shipping" }).click();
     await page
       .locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden)")
-      .getByTitle("No")
+      .getByTitle("No", { exact: true })
       .click();
 
     await page.getByRole("button", { name: "CREATE PRODUCT" }).click();
