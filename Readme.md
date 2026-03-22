@@ -42,6 +42,9 @@
 | Mervyn Teo Zi Yan   | Integration (Jest + Supertest + MongoMemoryServer) | - Auth middleware & RBAC endpoints<br>- Registration endpoint<br>- Login endpoint<br>- Forgot password endpoint                 | tests/integration/auth/authMiddleware.integration.test.js<br>tests/integration/auth/register.integration.test.js<br>tests/integration/auth/login.integration.test.js<br>tests/integration/auth/forgotPassword.integration.test.js | 
 | Mervyn Teo Zi Yan   | Integration (Jest + React Testing Library)         | - Login/Register auth flow with AuthContext & Router<br>- AdminDashboard context consumption & menu routing                     | client/src/pages/Auth/authFlow.integration.test.js<br>client/src/pages/admin/adminDashboard.integration.test.js                                                                                                                   | 
 | Mervyn Teo Zi Yan   | UI / E2E (Playwright)                              | - Login flow<br>- Register flow<br>- Auth context persistence<br>- Admin dashboard workflows                                    | tests/ui/auth/login.spec.js<br>tests/ui/auth/register.spec.js<br>tests/ui/auth/auth-context.spec.js<br>tests/ui/admin/admin-dashboard.spec.js                                                                                     |
+| Teo Kai Xiang      | Integration - Frontend (Jest)                                | - Home page interactions: Filtering by price, filtering by category and load more products<br/>- Homepage-Cart Interactions: Add to cart and check states are correct<br/>- Cart Page specific flows: Remove from cart, flows to redirect the user if user is not logged in or address has not been updated | `tests/integration/frontend/home-category-cart.integration.test.js`<br/>`tests/integration/frontend/login-checkout.integration.test.js`                                                 |
+| Teo Kai Xiang      | Integration - Backend (Jest + MongoMemoryServer + Supertest) | - Braintree flows: `/token` and `/payment` tested in isolation, and a full mock payment from from `token` to receiving a valid response from Braintree<br/>- Category listing flows: Returning of category lists, single category access + edge cases such as 0 categories                                  | `tests/integration/backend/productController.test.js`(`braintree` endpoints)<br/>`tests/integration/backend/categoryController.test.js`(`get-category` and `single-category`)           |
+| Teo Kai Xiang      | UI Testing (Playwright E2E + UI only)                        | - HomePage flows: User filters by price, category and adds to cart<br/>- CartPage flows: User removes from cart, gets redirected to login page if not logged in, and update address flows<br/>- Categories: A simple UI only test                                                                           | `tests/ui/pages/HomePage.spec.js`<br/>`tests/ui/CartPage.spec.js`<br/>`tests/ui/Categories.spec.js`                                                                                     |
 
 ## 1. Project Introduction
 
@@ -66,9 +69,11 @@ Virtual Vault is a full-stack MERN (MongoDB, Express.js, React.js, Node.js) e-co
 ### 1. Installing Node.js
 
 1. **Download and Install Node.js**:
+   
    - Visit [nodejs.org](https://nodejs.org) to download and install Node.js.
 
 2. **Verify Installation**:
+   
    - Open your terminal and check the installed versions of Node.js and npm:
      ```bash
      node -v
@@ -78,25 +83,35 @@ Virtual Vault is a full-stack MERN (MongoDB, Express.js, React.js, Node.js) e-co
 ### 2. MongoDB Setup
 
 1. **Download and Install MongoDB Compass**:
+   
    - Visit [MongoDB Compass](https://www.mongodb.com/products/tools/compass) and download and install MongoDB Compass for your operating system.
 
 2. **Create a New Cluster**:
+   
    - Sign up or log in to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas/register).
+   
    - After logging in, create a project and within that project deploy a free cluster.
 
 3. **Configure Database Access**:
+   
    - Create a new user for your database (if not alredy done so) in MongoDB Atlas.
+   
    - Navigate to "Database Access" under "Security" and create a new user with the appropriate permissions.
 
 4. **Whitelist IP Address**:
+   
    - Go to "Network Access" under "Security" and whitelist your IP address to allow access from your machine.
+   
    - For example, you could whitelist 0.0.0.0 to allow access from anywhere for ease of use.
 
 5. **Connect to the Database**:
+   
    - In your cluster's page on MongoDB Atlas, click on "Connect" and choose "Compass".
+   
    - Copy the connection string.
 
 6. **Establish Connection with MongoDB Compass**:
+   
    - Open MongoDB Compass on your local machine, paste the connection string (replace the necessary placeholders), and establish a connection to your cluster.
 
 ### 3. Application Setup
@@ -104,49 +119,65 @@ Virtual Vault is a full-stack MERN (MongoDB, Express.js, React.js, Node.js) e-co
 To download and use the MERN (MongoDB, Express.js, React.js, Node.js) app from GitHub, follow these general steps:
 
 1. **Clone the Repository**
+   
    - Go to the GitHub repository of the MERN app.
+   
    - Click on the "Code" button and copy the URL of the repository.
+   
    - Open your terminal or command prompt.
+   
    - Use the `git clone` command followed by the repository URL to clone the repository to your local machine:
      ```bash
      git clone <repository_url>
      ```
+   
    - Navigate into the cloned directory.
+   
    - Copy .env.example to .env:
-
+   
    ```
    cp .env.example .env
    ```
 
 2. **Install Frontend and Backend Dependencies**
+   
    - Run the following command in your project's root directory:
-
+   
      ```
      npm install && cd client && npm install && cd ..
      ```
 
 3. **Add database connection string to `.env`**
+   
    - Add the connection string copied from MongoDB Atlas to the `.env` file inside the project directory (replace the necessary placeholders):
      ```env
      MONGO_URL = <connection string>
      ```
 
 4. **Adding sample data to database**
+   
    - Download “Sample DB Schema” from Canvas and extract it.
+   
    - In MongoDB Compass, create a database named `test` under your cluster.
+   
    - Add four collections to this database: `categories`, `orders`, `products`, and `users`.
+   
    - Under each collection, click "ADD DATA" and import the respective JSON from the extracted "Sample DB Schema".
 
 5. **Running the Application**
+   
    - Open your web browser.
+   
    - Use `npm run dev` to run the app from root directory, which starts the development server.
+   
    - Navigate to `http://localhost:3000` to access the application.
 
 6. **Generating Report with SonarQube**
+   
    ```
    cp sonar-project.example.properties sonar-project.properties
    ```
-
+   
    - Fill it in with ur own token
 
 ## 5. Unit Testing with Jest
@@ -160,10 +191,9 @@ To begin unit testing with Jest in your project, follow these steps:
 
 1. **Install Jest**:  
    Use your preferred package manager to install Jest. For instance, with npm:
-
+   
    ```bash
    npm install --save-dev jest
-
    ```
 
 2. **Write Tests**  
@@ -172,24 +202,26 @@ To begin unit testing with Jest in your project, follow these steps:
 3. **Run Tests**  
    Execute your tests using Jest to ensure that your components meet the expected behaviour.  
    You can run the tests by using the following command in the root of the directory:
+   
    - **Frontend tests**
-
+   
      ```bash
      npm run test:frontend
      ```
-
+   
    - **Backend tests**
-
+   
      ```bash
      npm run test:backend
      ```
-
+   
    - **All the tests**
      ```bash
      npm run test
      ```
+   
    - **Run a Single Test File/Folder**
-
+   
      ```bash
      npm run test:frontend -- path/to/file.test.js
      npm run test:frontend -- path/to/folder

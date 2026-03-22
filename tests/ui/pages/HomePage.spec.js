@@ -295,6 +295,8 @@ test.describe("Functional E2E", () => {
   test("applies category and price filters to show matching products", async ({
     page,
   }) => {
+    // Summary: Verifies combined category and price filters narrow the real homepage dataset to the intersection.
+    // Flow: seed category and product data -> open homepage -> apply category filter -> apply price filter -> assert only matching seeded products remain.
     test.slow();
 
     const seededData = await seedFilterScenarioData();
@@ -346,6 +348,8 @@ test.describe("Functional E2E", () => {
   test("adds filtered products to cart and shows them in the cart summary", async ({
     page,
   }) => {
+    // Summary: Verifies products discovered through filtered search can be added and carried into the cart summary.
+    // Flow: seed filter scenario -> apply both filters -> add each visible product -> open cart -> assert item names and computed total.
     test.slow();
 
     const seededData = await seedFilterScenarioData();
@@ -415,6 +419,8 @@ test.describe("Functional E2E", () => {
   test("RESET FILTERS restores the unfiltered seeded products after category and price filters are applied", async ({
     page,
   }) => {
+    // Summary: Verifies reset clears UI filter controls and repopulates the unfiltered homepage list.
+    // Flow: seed filter scenario -> apply category and price filters -> click RESET FILTERS -> assert controls are unchecked -> assert all seeded products reappear.
     test.slow();
 
     const seededData = await seedFilterScenarioData();
@@ -465,6 +471,8 @@ test.describe("Functional E2E", () => {
   test("More Details opens the seeded product details page from the homepage", async ({
     page,
   }) => {
+    // Summary: Verifies product-details navigation opens the correct detail route for a seeded homepage card.
+    // Flow: seed filter scenario -> open homepage -> click More Details on target card -> assert product URL, heading, product name, and category text.
     test.slow();
 
     const seededData = await seedFilterScenarioData();
@@ -501,6 +509,8 @@ test.describe("Functional E2E", () => {
   test("Load more appends the next page of unfiltered products", async ({
     page,
   }) => {
+    // Summary: Verifies unfiltered pagination appends page-two products rather than replacing page-one cards.
+    // Flow: seed 8 ordered products -> open homepage -> confirm first 6 render -> click Loadmore -> assert response and combined card count -> assert remaining products appear.
     test.slow();
 
     const seededData = await seedLoadMoreData();
@@ -555,6 +565,8 @@ test.describe("Functional E2E", () => {
   test("Load more adheres to the category and price filters while loading more filtered products", async ({
     page,
   }) => {
+    // Summary: Verifies filtered pagination preserves both active filters when requesting the next page.
+    // Flow: seed load-more dataset -> apply category and price filters -> click Loadmore -> assert request payload includes page 2 plus active filters -> assert page-two filtered products append.
     test.slow();
 
     const seededData = await seedLoadMoreData();
@@ -631,6 +643,8 @@ test.describe("User interface", () => {
   test("shows the banner, product heading, and filter section headings", async ({
     page,
   }) => {
+    // Summary: Verifies the homepage shell renders its banner and filter section labels.
+    // Flow: open homepage -> assert banner image, main heading, category heading, price heading, and reset button visibility.
     await loadHomePage(page);
 
     await expect(page.getByAltText("bannerimage")).toBeVisible();
@@ -649,6 +663,8 @@ test.describe("User interface", () => {
   test("shows category checkboxes and price radio options", async ({
     page,
   }) => {
+    // Summary: Verifies the filter control groups render at least one category option and one price option.
+    // Flow: open homepage -> assert first category checkbox and first price radio are visible -> assert non-zero option counts.
     await loadHomePage(page);
 
     await expect(getCategoryOptions(page).first()).toBeVisible();
@@ -660,6 +676,8 @@ test.describe("User interface", () => {
   test("shows product cards with image, name, price, description, and action buttons", async ({
     page,
   }) => {
+    // Summary: Verifies a standard homepage product card exposes all required visual and action elements.
+    // Flow: open homepage -> inspect first product card -> assert image, title, price, description, More Details, and ADD TO CART controls.
     await loadHomePage(page);
 
     const firstCard = getHomeProductCards(page).first();
@@ -679,6 +697,8 @@ test.describe("User interface", () => {
   test("shows the header cart link and cart badge on the homepage", async ({
     page,
   }) => {
+    // Summary: Verifies the homepage header exposes cart navigation and an empty-cart badge state.
+    // Flow: open homepage -> assert cart link is visible -> assert cart badge exists with count 0.
     await loadHomePage(page);
 
     await expect(page.locator("a[href='/cart']")).toBeVisible();

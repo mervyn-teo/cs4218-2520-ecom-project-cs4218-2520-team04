@@ -1,13 +1,5 @@
-/**
- * By: OpenAI Codex
- *
- * UI tests for client/src/pages/Categories.js (/categories)
- *
- * Coverage
- * 1. User interface: category links render as button-styled links
- * 2. User interface: each rendered category link points to /category/:slug
- * 3. User interface: Header and Footer are visible on the page
- */
+// Teo Kai Xiang A0272558U
+// Written by GPT 5.4 Codex based on test plan by me. Reviewed after using code review and manual reading
 
 import { test, expect } from "@playwright/test";
 import mongoose from "mongoose";
@@ -89,13 +81,21 @@ test.describe("User interface", () => {
     seededData = null;
   });
 
-  test("category links are visible as primary buttons on the page", async ({ page }) => {
+  test("category links are visible as primary buttons on the page", async ({
+    page,
+  }) => {
+    // Summary: Verifies every seeded category renders as a visible link on the categories page.
+    // Flow: seed categories -> open categories page -> assert each seeded category link is visible.
     for (const category of seededData.categories) {
       await expect(getCategoryLinkByName(page, category.name)).toBeVisible();
     }
   });
 
-  test("each rendered category link points to /category/:slug", async ({ page }) => {
+  test("each rendered category link points to /category/:slug", async ({
+    page,
+  }) => {
+    // Summary: Verifies each rendered category link targets the slug-based category route.
+    // Flow: seed categories -> open categories page -> assert each category link href matches /category/:slug.
     for (const category of seededData.categories) {
       await expect(getCategoryLinkByName(page, category.name)).toHaveAttribute(
         "href",
@@ -105,16 +105,22 @@ test.describe("User interface", () => {
   });
 
   test("Header is visible on the Categories page", async ({ page }) => {
+    // Summary: Verifies the shared header layout renders on the categories page.
+    // Flow: seed categories -> open categories page -> assert nav element is visible.
     await expect(page.locator("nav")).toBeVisible();
   });
 
   test("Footer is visible on the Categories page", async ({ page }) => {
+    // Summary: Verifies the shared footer layout renders on the categories page.
+    // Flow: seed categories -> open categories page -> assert footer element is visible.
     await expect(page.locator("div.footer")).toBeVisible();
   });
 
   test("clicking a seeded category link opens the real category page", async ({
     page,
   }) => {
+    // Summary: Verifies category navigation uses the real route and renders the target category page.
+    // Flow: seed categories -> open categories page -> click one category link -> assert destination URL and category result summary.
     const targetCategory = seededData.categories[0];
 
     await getCategoryLinkByName(page, targetCategory.name).click();

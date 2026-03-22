@@ -294,6 +294,8 @@ describe("[Integration] Home shopper flows", () => {
 
   describe("Happy path", () => {
     it("applies a category filter and updates the product list", async () => {
+      // Summary: Verifies a single category selection triggers the filter API and narrows the visible products.
+      // Flow: load homepage -> click Electronics checkbox -> assert POST payload -> assert only category-matching products remain.
       setupHttpMocks();
 
       // Arrange
@@ -321,6 +323,8 @@ describe("[Integration] Home shopper flows", () => {
     });
 
     it("applies a price filter and updates the product list", async () => {
+      // Summary: Verifies a price-band selection sends the expected filter payload and refreshes the product list.
+      // Flow: load homepage -> click $20 to 39 radio option -> assert POST payload -> assert only price-matching products remain.
       setupHttpMocks();
 
       // Arrange
@@ -348,6 +352,8 @@ describe("[Integration] Home shopper flows", () => {
     });
 
     it("applies category and price filters together and keeps only the matching results", async () => {
+      // Summary: Verifies combined filters intersect correctly instead of overwriting one another.
+      // Flow: load homepage -> select category -> select price range -> assert combined POST payload -> assert only intersection results remain.
       setupHttpMocks();
 
       // Arrange
@@ -383,6 +389,8 @@ describe("[Integration] Home shopper flows", () => {
     });
 
     it("clears an selected category filter without leaving stale filtered products behind", async () => {
+      // Summary: Verifies unchecking a selected category resets the list back to the unfiltered page-one dataset.
+      // Flow: load homepage -> apply category filter -> confirm filtered state -> uncheck category -> assert fallback GET call -> assert original products return.
       setupHttpMocks();
 
       // Arrange
@@ -417,6 +425,8 @@ describe("[Integration] Home shopper flows", () => {
     });
 
     it("adds a product to cart and syncs cart context plus localStorage", async () => {
+      // Summary: Verifies add-to-cart updates UI badge state, cart context, toast feedback, and persisted localStorage state together.
+      // Flow: load homepage -> click ADD TO CART on a product -> assert context count -> assert badge count -> assert localStorage payload -> assert toast.
       setupHttpMocks();
 
       // Arrange
@@ -448,6 +458,8 @@ describe("[Integration] Home shopper flows", () => {
     });
 
     it("opens the cart page from the header and shows the correct cart item", async () => {
+      // Summary: Verifies header cart navigation preserves the chosen item and renders the correct cart summary.
+      // Flow: load homepage -> add one product -> open cart link -> assert cart heading, item name, price label, and item count.
       setupHttpMocks();
 
       // Arrange
@@ -481,6 +493,8 @@ describe("[Integration] Home shopper flows", () => {
     });
 
     it("loads more unfiltered products and appends page 2 results", async () => {
+      // Summary: Verifies unfiltered pagination appends the next product page without replacing page-one content.
+      // Flow: load homepage -> click Loadmore -> assert page-two GET call -> assert old and new products coexist -> assert no duplicates.
       setupHttpMocks();
 
       // Arrange
@@ -509,6 +523,8 @@ describe("[Integration] Home shopper flows", () => {
     });
 
     it("keeps category and price filters fixed when loading more filtered products", async () => {
+      // Summary: Verifies filtered pagination keeps the active filter state while requesting page two.
+      // Flow: load homepage -> apply category and price filters -> click Loadmore -> assert POST payload still includes filters with page 2 -> assert merged filtered results.
       setupHttpMocks();
 
       // Arrange
@@ -559,6 +575,8 @@ describe("[Integration] Home shopper flows", () => {
 
   describe("Negative path", () => {
     it("renders an empty result set gracefully when a category and price combination matches nothing", async () => {
+      // Summary: Verifies the page remains stable when the filter combination returns zero matching products.
+      // Flow: load homepage with empty combined-filter response -> apply category and price filters -> assert empty POST response handling -> assert no product cards render.
       setupHttpMocks({
         filterResponses: {
           [buildFilterKey({ checked: [CATEGORY_ID], radio: PRICE_RANGE })]: {

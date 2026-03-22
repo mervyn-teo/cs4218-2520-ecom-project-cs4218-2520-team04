@@ -1,12 +1,5 @@
-/**
- * By: OpenAI Codex
- *
- * UI tests for client/src/pages/CartPage.js (/cart)
- *
- * Coverage
- * 1. Functional E2E: add a product from HomePage and remove it from CartPage
- * 2. User interface: cart summary, guest checkout CTA, item card content, and empty-cart state
- */
+// Teo Kai Xiang A0272558U
+// Written by GPT 5.4 Codex based on test plan by me. Reviewed after using code review and manual reading
 
 import { test, expect } from "@playwright/test";
 import mongoose from "mongoose";
@@ -298,6 +291,8 @@ test.describe("Functional E2E", () => {
   test("guest shopper can add a product on the home page and see it in the cart page", async ({
     page,
   }) => {
+    // Summary: Verifies a guest can add a real homepage product and see it carried into the cart page.
+    // Flow: open homepage -> add first product -> assert badge increments -> open cart -> assert item name, total, and badge count.
     test.slow();
 
     await loadHomePage(page);
@@ -327,6 +322,8 @@ test.describe("Functional E2E", () => {
   test("guest shopper can remove a product from the cart page", async ({
     page,
   }) => {
+    // Summary: Verifies removing the only cart item updates the empty state and resets totals.
+    // Flow: seed guest cart -> click Remove -> assert empty-cart text, zero total, and zero badge count.
     await goToSeededCartPage(page);
 
     await getFirstCartItem(page).getByRole("button", { name: /remove/i }).click();
@@ -338,6 +335,8 @@ test.describe("Functional E2E", () => {
   test("guest checkout redirects to login and returns with the cart preserved after login", async ({
     page,
   }) => {
+    // Summary: Verifies guest checkout redirects through login and preserves the cart across authentication.
+    // Flow: seed guest cart -> click login to checkout -> log in as test user -> assert redirect back to cart with item, total, and badge preserved.
     await goToSeededCartPage(page);
 
     await getCartSummary(page)
@@ -362,6 +361,8 @@ test.describe("Functional E2E", () => {
   test("logged-in shopper sees the Braintree checkout section when the cart has items", async ({
     page,
   }) => {
+    // Summary: Verifies authenticated shoppers with cart items can see the checkout UI and DropIn container.
+    // Flow: open seeded cart with user storage state -> assert address section, Braintree wrapper, and Make Payment button are visible.
     test.slow();
 
     await goToSeededCartPage(page);
@@ -379,6 +380,8 @@ test.describe("Functional E2E", () => {
   test("logged-in shopper keeps the cart when the Braintree token request fails", async ({
     page,
   }) => {
+    // Summary: Verifies token-fetch failure hides checkout widgets but does not mutate cart state.
+    // Flow: intercept token API with 500 -> seed logged-in cart with address -> open cart -> assert no DropIn/payment button and unchanged cart snapshot.
     await page.route("**/api/v1/product/braintree/token", async (route) => {
       await route.fulfill({
         status: 500,
@@ -401,6 +404,8 @@ test.describe("Functional E2E", () => {
   test("logged-in shopper keeps the cart when requesting a payment method fails", async ({
     page,
   }) => {
+    // Summary: Verifies a client-side payment-method failure does not send the payment API request or clear the cart.
+    // Flow: intercept payment route counter -> open authed cart with address -> click Make Payment without hosted-field completion -> assert no API call and intact cart.
     let paymentApiCalls = 0;
 
     await page.route("**/api/v1/product/braintree/payment", async (route) => {
@@ -434,6 +439,8 @@ test.describe("Functional E2E", () => {
   test("logged-in shopper keeps the cart when the payment API rejects the checkout", async ({
     page,
   }) => {
+    // Summary: Verifies server-side payment rejection leaves cart contents, totals, and route unchanged.
+    // Flow: intercept payment API with 500 -> open authed cart -> fill Braintree form -> submit payment -> assert failed response and intact cart state.
     const cartItems = [guestCartProduct];
 
     await page.route("**/api/v1/product/braintree/payment", async (route) => {
@@ -469,6 +476,8 @@ test.describe("Functional E2E", () => {
   test("logged-in shopper can complete payment and later see the purchased items on the orders page", async ({
     page,
   }) => {
+    // Summary: Verifies the full authenticated checkout path from homepage carting through payment and orders history.
+    // Flow: seed checkout products -> add them from homepage -> open cart -> complete Braintree checkout -> assert redirect to orders, cleared cart, and purchased items listed.
     test.slow();
 
     const seededData = await seedCheckoutHappyPathData();
@@ -546,6 +555,8 @@ test.describe("Functional E2E", () => {
   test("logged-in shopper without an address sees Update Address and cannot reach payment", async ({
     page,
   }) => {
+    // Summary: Verifies checkout is gated when an authenticated shopper has no saved address.
+    // Flow: seed authenticated cart with blank address -> open cart -> assert Update Address is shown and payment controls are hidden.
     await goToSeededAuthedCartPage(page);
 
     await expect(
@@ -562,6 +573,8 @@ test.describe("UI test", () => {
   test("shows the guest cart summary and checkout prompt when a guest has cart items", async ({
     page,
   }) => {
+    // Summary: Verifies the guest cart summary renders the expected greeting, count, and checkout prompt copy.
+    // Flow: seed guest cart -> open cart -> assert guest heading, item count text, cart summary heading, summary labels, and login CTA.
     await goToSeededCartPage(page);
 
     await expect(page.getByRole("heading", { name: /hello guest/i })).toBeVisible();
@@ -576,6 +589,8 @@ test.describe("UI test", () => {
   test("shows each cart item with image, name, price, and remove action", async ({
     page,
   }) => {
+    // Summary: Verifies a cart item card renders the expected media, text, and remove control.
+    // Flow: seed guest cart -> inspect first cart card -> assert image, item name, price label, and Remove button.
     await goToSeededCartPage(page);
 
     const firstCartItem = getFirstCartItem(page);
@@ -589,6 +604,8 @@ test.describe("UI test", () => {
   test("shows the empty-cart state and zero total when the cart has no items", async ({
     page,
   }) => {
+    // Summary: Verifies the cart page renders the empty-state UI when localStorage contains no items.
+    // Flow: seed empty cart -> open cart -> assert empty-cart message, cart summary heading, zero total, and zero badge count.
     await goToSeededCartPage(page, []);
 
     await expect(page.locator(".cart-page")).toContainText("Your Cart Is Empty");

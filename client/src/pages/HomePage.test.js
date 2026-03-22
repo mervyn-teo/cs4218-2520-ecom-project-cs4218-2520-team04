@@ -99,6 +99,8 @@ describe("HomePage Component", () => {
 
   describe("Happy Path Tests - when everything works as expected, the component", () => {
     it("renders products returned from product list API on initial load", async () => {
+      // Summary: Verifies the initial page load renders products returned by the product list API.
+      // Flow: mock category/count/list endpoints -> render component -> assert heading and product names -> assert expected GET calls.
       // We mock the URL implementation instead as useEffect() means the order of API calls is not guaranteed, so we need to handle all possible calls in our mock implementation.
       // ------------ Arrange ------------
       mockAxiosByUrl(axios.get, HAPPY_PATH_RESPONSES);
@@ -126,6 +128,8 @@ describe("HomePage Component", () => {
     });
 
     it("renders HomePage as usual when no products are listed", async () => {
+      // Summary: Verifies the page shell still renders when the product list is empty.
+      // Flow: mock empty category/count/list responses -> render component -> assert heading -> assert initial GET calls still execute.
       // We mock the URL implementation instead as useEffect() means the order of API calls is not guaranteed, so we need to handle all possible calls in our mock implementation.
       // ------------ Arrange ------------
       mockAxiosByUrl(axios.get, HAPPY_PATH_RESPONSES_EMPTY);
@@ -146,6 +150,8 @@ describe("HomePage Component", () => {
     });
 
     it("renders category checkboxes when category API succeeds", async () => {
+      // Summary: Verifies successful category fetch populates the checkbox filter group.
+      // Flow: mock category, count, and list responses -> render component -> assert both category checkboxes are visible.
       // ------------ Arrange ------------
       const responses = {
         "/api/v1/category/get-category": {
@@ -174,6 +180,8 @@ describe("HomePage Component", () => {
     });
 
     it("calls filter API with selected radio range when a price option is clicked", async () => {
+      // Summary: Verifies selecting a price band sends the expected filter payload with page 1.
+      // Flow: mock initial GET responses and filter POST response -> render component -> click price radio -> assert POST payload.
       // ------------ Arrange ------------
       const responses = {
         "/api/v1/category/get-category": {
@@ -207,6 +215,8 @@ describe("HomePage Component", () => {
     });
 
     it("calls filter API with selected category when a category checkbox is clicked", async () => {
+      // Summary: Verifies selecting a category checkbox sends the expected category filter payload.
+      // Flow: mock initial GET responses and filter POST response -> render component -> click category checkbox -> assert POST payload.
       // ------------ Arrange ------------
       const responses = {
         "/api/v1/category/get-category": {
@@ -240,6 +250,8 @@ describe("HomePage Component", () => {
     });
 
     it("removes unchecked category id from filter payload while preserving selected price filter", async () => {
+      // Summary: Verifies unchecking a category removes it from the filter payload without clearing the chosen price filter.
+      // Flow: mock initial/filter responses -> render component -> select price -> toggle category on and off -> assert last POST payload keeps only price range.
       // ------------ Arrange ------------
       const responses = {
         "/api/v1/category/get-category": {
@@ -279,6 +291,8 @@ describe("HomePage Component", () => {
     });
 
     it("uses product-list endpoint and does not call filter API when no filters are selected", async () => {
+      // Summary: Verifies the page stays on the default product-list flow until a filter is actually selected.
+      // Flow: mock initial GET responses -> render component -> assert products appear -> assert GET list called and POST filter not called.
       // ------------ Arrange ------------
       const responses = {
         "/api/v1/category/get-category": {
@@ -303,6 +317,8 @@ describe("HomePage Component", () => {
     });
 
     it("loads next page of products when Loadmore button is clicked and more products exist", async () => {
+      // Summary: Verifies clicking Loadmore requests page two and appends the next product batch.
+      // Flow: mock paginated GET responses -> render component -> click Loadmore -> assert page-two GET call and appended product text.
       // ------------ Arrange ------------
       const nextPageProducts = [
         {
@@ -346,6 +362,8 @@ describe("HomePage Component", () => {
     });
 
     it("hides Loadmore button when all products are already loaded", async () => {
+      // Summary: Verifies the pagination CTA is hidden once the loaded product count matches the total count.
+      // Flow: mock count and page-one responses with all products already present -> render component -> assert Loadmore button is absent.
       // ------------ Arrange ------------
       const responses = {
         "/api/v1/category/get-category": {
@@ -373,6 +391,8 @@ describe("HomePage Component", () => {
 
   describe("Unhappy Path Tests - when something breaks, the component", () => {
     it("handles API errors gracefully and does not crash the component", async () => {
+      // Summary: Verifies failed initial API calls do not prevent the page shell from rendering.
+      // Flow: mock errors for category, count, and list endpoints -> render component -> assert heading remains visible -> assert GET attempts still occurred.
       // ------------ Arrange ------------
       mockAxiosByUrlWithError(axios.get, ERROR_RESPONSES);
 
@@ -392,6 +412,8 @@ describe("HomePage Component", () => {
     });
 
     it("does not render category checkboxes when category API returns success false", async () => {
+      // Summary: Verifies unsuccessful category responses do not render stale or invalid checkbox options.
+      // Flow: mock category API with success false plus valid count/list responses -> render component -> assert heading renders and category checkboxes stay hidden.
       // ------------ Arrange ------------
       const responses = {
         "/api/v1/category/get-category": {
