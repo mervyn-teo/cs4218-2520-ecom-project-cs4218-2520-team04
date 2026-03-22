@@ -25,6 +25,12 @@ const ensureMongoConnection = async () => {
     return;
   }
 
+  if (mongoose.connection.readyState === 3) {
+    await new Promise((resolve) => {
+      mongoose.connection.once("disconnected", resolve);
+    });
+  }
+
   await mongoose.connect(process.env.MONGO_URL);
 };
 
@@ -57,7 +63,7 @@ const getCategoryLinkByName = (page, categoryName) =>
   page.getByRole("link", { name: categoryName });
 
 const goToCategoriesPage = async (page, firstCategoryName) => {
-  await page.goto("/categories");
+  await page.goto("/categories", { waitUntil: "domcontentloaded" });
   await expect(page.locator("nav")).toBeVisible();
   await expect(getCategoryLinkByName(page, firstCategoryName)).toBeVisible({
     timeout: 10000,

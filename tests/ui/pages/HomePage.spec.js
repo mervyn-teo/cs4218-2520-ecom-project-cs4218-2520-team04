@@ -78,7 +78,7 @@ const waitForProductListResponse = (page, pageNumber) =>
   );
 
 const loadHomePage = async (page) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("h1.text-center")).toContainText("All Products");
   await expect(getCategoryOptions(page).first()).toBeVisible({
     timeout: 10000,
@@ -119,6 +119,12 @@ const ensureMongoConnection = async () => {
   if (mongoose.connection.readyState === 2) {
     await mongoose.connection.asPromise();
     return;
+  }
+
+  if (mongoose.connection.readyState === 3) {
+    await new Promise((resolve) => {
+      mongoose.connection.once("disconnected", resolve);
+    });
   }
 
   await mongoose.connect(process.env.MONGO_URL);
@@ -448,6 +454,8 @@ test.describe("Functional E2E", () => {
         page.waitForLoadState("domcontentloaded"),
         getFilterPanel(page).getByRole("button", { name: /reset filters/i }).click(),
       ]);
+
+      await expect(page.locator("h1.text-center")).toContainText("All Products");
 
       await expect(
         page.getByRole("checkbox", { name: seededData.targetCategory.name }),

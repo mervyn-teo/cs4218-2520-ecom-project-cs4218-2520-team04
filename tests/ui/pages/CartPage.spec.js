@@ -27,6 +27,9 @@ const getCartBadge = (page) =>
 const getCartSummary = (page) =>
   page.locator(".cart-summary");
 
+const getCartTotalHeading = (page) =>
+  getCartSummary(page).locator("h4").filter({ hasText: /^Total\s*:/ });
+
 const getCartItems = (page) =>
   page.locator(".cart-page .row.card.flex-row");
 
@@ -73,7 +76,7 @@ const userWithoutAddressAuth = {
 };
 
 const loadHomePage = async (page) => {
-  await page.goto("/");
+  await page.goto("/", { waitUntil: "domcontentloaded" });
   await expect(page.locator("h1.text-center")).toContainText("All Products");
   await expect(getHomeProductCards(page).first()).toBeVisible({ timeout: 10000 });
 };
@@ -95,6 +98,12 @@ const ensureMongoConnection = async () => {
   if (mongoose.connection.readyState === 2) {
     await mongoose.connection.asPromise();
     return;
+  }
+
+  if (mongoose.connection.readyState === 3) {
+    await new Promise((resolve) => {
+      mongoose.connection.once("disconnected", resolve);
+    });
   }
 
   await mongoose.connect(process.env.MONGO_URL);
@@ -236,7 +245,8 @@ const fillHostedField = async (page, iframeTitle, value) => {
   await iframeLocator.first().waitFor({ state: "visible", timeout: 30000 });
   await page
     .frameLocator(`iframe[title="${iframeTitle}"]`)
-    .locator("input")
+    .locator("input:not([aria-hidden='true'])")
+    .first()
     .fill(value);
 };
 
@@ -262,7 +272,7 @@ const fillBraintreeCardForm = async (page) => {
 
 const goToSeededCartPage = async (page, cartItems = [guestCartProduct]) => {
   await seedCartBeforeNavigation(page, cartItems);
-  await page.goto("/cart");
+  await page.goto("/cart", { waitUntil: "domcontentloaded" });
   await expect(page.locator(".cart-page")).toBeVisible();
 };
 
@@ -272,14 +282,14 @@ const goToSeededAuthedCartPage = async (
 ) => {
   await seedCartBeforeNavigation(page, cartItems);
   await seedAuthBeforeNavigation(page, authState);
-  await page.goto("/cart");
+  await page.goto("/cart", { waitUntil: "domcontentloaded" });
   await expect(page.locator(".cart-page")).toBeVisible();
 };
 
 const expectCartToRemainIntact = async (page, cartItems) => {
   await expect(page).toHaveURL(/\/cart$/);
   await expect(page.locator(".cart-page")).toContainText(cartItems[0].name);
-  await expect(getCartSummary(page).locator("h4")).toContainText(
+  await expect(getCartTotalHeading(page)).toContainText(
     formatCurrency(cartItems.reduce((runningTotal, item) => runningTotal + item.price, 0)),
   );
   await expect(getCartBadge(page)).toHaveAttribute("title", String(cartItems.length));
@@ -313,7 +323,7 @@ test.describe("Functional E2E", () => {
     await expect(
       getCartSummary(page).getByRole("heading", { name: /cart summary/i }),
     ).toBeVisible();
-    await expect(getCartSummary(page).locator("h4")).toContainText(
+    await expect(getCartTotalHeading(page)).toContainText(
       formatCurrency(product.price),
     );
     await expect(getCartBadge(page)).toHaveAttribute("title", "1");
@@ -328,7 +338,7 @@ test.describe("Functional E2E", () => {
 
     await getFirstCartItem(page).getByRole("button", { name: /remove/i }).click();
     await expect(page.locator(".cart-page")).toContainText("Your Cart Is Empty");
-    await expect(getCartSummary(page).locator("h4")).toContainText("$0.00");
+    await expect(getCartTotalHeading(page)).toContainText("$0.00");
     await expect(getCartBadge(page)).toHaveAttribute("title", "0");
   });
 
@@ -350,17 +360,18 @@ test.describe("Functional E2E", () => {
 
     await expect(page).toHaveURL("/cart");
     await expect(page.locator(".cart-page")).toContainText(guestCartProduct.name);
-    await expect(getCartSummary(page).locator("h4")).toContainText(
+    await expect(getCartTotalHeading(page)).toContainText(
       formatCurrency(guestCartProduct.price),
     );
     await expect(getCartBadge(page)).toHaveAttribute("title", "1");
   });
 
-  test.use({ storageState: "playwright/.user.auth.json" });
+  test.describe("Authenticated checkout flows", () => {
+    test.use({ storageState: "playwright/.user.auth.json" });
 
-  test("logged-in shopper sees the Braintree checkout section when the cart has items", async ({
-    page,
-  }) => {
+    test("logged-in shopper sees the Braintree checkout section when the cart has items", async ({
+      page,
+    }) => {
     // Summary: Verifies authenticated shoppers with cart items can see the checkout UI and DropIn container.
     // Flow: open seeded cart with user storage state -> assert address section, Braintree wrapper, and Make Payment button are visible.
     test.slow();
@@ -375,11 +386,11 @@ test.describe("Functional E2E", () => {
     await expect(
       getCartSummary(page).getByRole("button", { name: /make payment/i }),
     ).toBeVisible();
-  });
+    });
 
-  test("logged-in shopper keeps the cart when the Braintree token request fails", async ({
-    page,
-  }) => {
+    test("logged-in shopper keeps the cart when the Braintree token request fails", async ({
+      page,
+    }) => {
     // Summary: Verifies token-fetch failure hides checkout widgets but does not mutate cart state.
     // Flow: intercept token API with 500 -> seed logged-in cart with address -> open cart -> assert no DropIn/payment button and unchanged cart snapshot.
     await page.route("**/api/v1/product/braintree/token", async (route) => {
@@ -399,11 +410,11 @@ test.describe("Functional E2E", () => {
       getCartSummary(page).getByRole("button", { name: /make payment/i }),
     ).toHaveCount(0);
     await expectCartToRemainIntact(page, [guestCartProduct]);
-  });
+    });
 
-  test("logged-in shopper keeps the cart when requesting a payment method fails", async ({
-    page,
-  }) => {
+    test("logged-in shopper keeps the cart when requesting a payment method fails", async ({
+      page,
+    }) => {
     // Summary: Verifies a client-side payment-method failure does not send the payment API request or clear the cart.
     // Flow: intercept payment route counter -> open authed cart with address -> click Make Payment without hosted-field completion -> assert no API call and intact cart.
     let paymentApiCalls = 0;
@@ -434,11 +445,11 @@ test.describe("Functional E2E", () => {
 
     expect(paymentApiCalls).toBe(0);
     await expectCartToRemainIntact(page, [guestCartProduct]);
-  });
+    });
 
-  test("logged-in shopper keeps the cart when the payment API rejects the checkout", async ({
-    page,
-  }) => {
+    test("logged-in shopper keeps the cart when the payment API rejects the checkout", async ({
+      page,
+    }) => {
     // Summary: Verifies server-side payment rejection leaves cart contents, totals, and route unchanged.
     // Flow: intercept payment API with 500 -> open authed cart -> fill Braintree form -> submit payment -> assert failed response and intact cart state.
     const cartItems = [guestCartProduct];
@@ -471,11 +482,11 @@ test.describe("Functional E2E", () => {
       timeout: 15000,
     });
     await expectCartToRemainIntact(page, cartItems);
-  });
+    });
 
-  test("logged-in shopper can complete payment and later see the purchased items on the orders page", async ({
-    page,
-  }) => {
+    test("logged-in shopper can complete payment and later see the purchased items on the orders page", async ({
+      page,
+    }) => {
     // Summary: Verifies the full authenticated checkout path from homepage carting through payment and orders history.
     // Flow: seed checkout products -> add them from homepage -> open cart -> complete Braintree checkout -> assert redirect to orders, cleared cart, and purchased items listed.
     test.slow();
@@ -499,7 +510,7 @@ test.describe("Functional E2E", () => {
 
       await page.locator("a[href='/cart']").click();
       await expect(page).toHaveURL("/cart");
-      await expect(getCartSummary(page).locator("h4")).toContainText(
+      await expect(getCartTotalHeading(page)).toContainText(
         formatCurrency(
           seededData.products.reduce(
             (runningTotal, product) => runningTotal + product.price,
@@ -550,11 +561,11 @@ test.describe("Functional E2E", () => {
         productIds: seededData.products.map((product) => product._id),
       });
     }
-  });
+    });
 
-  test("logged-in shopper without an address sees Update Address and cannot reach payment", async ({
-    page,
-  }) => {
+    test("logged-in shopper without an address sees Update Address and cannot reach payment", async ({
+      page,
+    }) => {
     // Summary: Verifies checkout is gated when an authenticated shopper has no saved address.
     // Flow: seed authenticated cart with blank address -> open cart -> assert Update Address is shown and payment controls are hidden.
     await goToSeededAuthedCartPage(page);
@@ -610,7 +621,8 @@ test.describe("UI test", () => {
 
     await expect(page.locator(".cart-page")).toContainText("Your Cart Is Empty");
     await expect(getCartSummary(page).getByRole("heading", { name: /cart summary/i })).toBeVisible();
-    await expect(getCartSummary(page).locator("h4")).toContainText("$0.00");
+    await expect(getCartTotalHeading(page)).toContainText("$0.00");
     await expect(getCartBadge(page)).toHaveAttribute("title", "0");
+    });
   });
 });
