@@ -348,6 +348,8 @@ describe("Public category read endpoints — no authentication required", () => 
 
   describe("GET /api/v1/category/get-category", () => {
     test("returns an empty category array without an Authorization header when no categories exist", async () => {
+      // Summary: Verifies the public category list endpoint is accessible without auth and returns an empty array for an empty database.
+      // Flow: call public category list endpoint with no seeded categories -> assert 200 response with empty category array.
       // Arrange
 
       // Act
@@ -363,6 +365,8 @@ describe("Public category read endpoints — no authentication required", () => 
     });
 
     test("returns all seeded categories with stable name and slug data without an Authorization header", async () => {
+      // Summary: Verifies the public category list endpoint returns all seeded categories with stable name and slug values.
+      // Flow: seed categories -> call public category list endpoint -> sort response -> assert expected ids, names, and slugs.
       // Arrange
       const seededCategories = await seedCategories();
 
@@ -396,6 +400,8 @@ describe("Public category read endpoints — no authentication required", () => 
   
   describe("GET /api/v1/category/single-category/:slug", () => {
     test("returns the exact seeded category for a known slug without an Authorization header", async () => {
+      // Summary: Verifies the single-category endpoint resolves a known slug to the correct category document.
+      // Flow: seed categories -> request single-category by valid slug -> assert 200 response and matching category payload.
       // Arrange
       const [electronicsCategory] = await seedCategories();
 
@@ -416,6 +422,8 @@ describe("Public category read endpoints — no authentication required", () => 
     });
 
     test("returns 200 with a null category for an unknown slug without an Authorization header to document current behavior", async () => {
+      // Summary: Documents the current public-route behavior for an unknown slug: HTTP 200 with a null category payload.
+      // Flow: seed categories -> request single-category by missing slug -> assert 200 response and null category body.
       // Arrange
       await seedCategories();
 

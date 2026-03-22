@@ -89,6 +89,8 @@ describe("CartPage Component", () => {
 
   describe("Happy Path Tests - when everything works as expected, the component", () => {
     it("renders guest greeting and cart count message for unauthenticated users", async () => {
+      // Summary: Verifies guest users see the correct greeting, cart count, and checkout prompt.
+      // Flow: mock guest auth, seeded cart, and token response -> render component -> assert guest heading, item count, and login prompt.
       // ------------ Arrange ------------
       mockAuthValue = { user: null, token: "" };
       mockCartValue = [PRODUCT_ONE, PRODUCT_TWO];
@@ -110,6 +112,8 @@ describe("CartPage Component", () => {
     });
 
     it("renders authenticated user greeting and cart summary message", async () => {
+      // Summary: Verifies authenticated users see personalized greeting text and cart summary without the guest prompt.
+      // Flow: mock authed user with address, seeded cart, and token response -> render component -> assert user greeting and item count.
       // ------------ Arrange ------------
       mockAuthValue = {
         token: "auth-token",
@@ -136,6 +140,8 @@ describe("CartPage Component", () => {
     });
 
     it("renders cart items with expected item details", async () => {
+      // Summary: Verifies cart item cards render the expected name, truncated description, and price label.
+      // Flow: mock guest auth, one cart item, and token response -> render component -> assert item fields are visible.
       // ------------ Arrange ------------
       mockAuthValue = { user: null, token: "" };
       mockCartValue = [PRODUCT_ONE];
@@ -159,6 +165,8 @@ describe("CartPage Component", () => {
     });
 
     it("removes an item when Remove is clicked and syncs cart to localStorage", async () => {
+      // Summary: Verifies removing a cart item updates both context state and persisted localStorage state.
+      // Flow: mock cart with two items -> render component -> click first Remove button -> assert setCart call and localStorage update.
       // ------------ Arrange ------------
       mockAuthValue = { user: null, token: "" };
       mockCartValue = [PRODUCT_ONE, PRODUCT_TWO];
@@ -182,6 +190,8 @@ describe("CartPage Component", () => {
     });
 
     it("shows total price in USD format", async () => {
+      // Summary: Verifies the total price is formatted using the expected USD currency display.
+      // Flow: mock cart with two priced items -> render component -> assert formatted total text is shown.
       // ------------ Arrange ------------
       mockAuthValue = { user: null, token: "" };
       mockCartValue = [PRODUCT_ONE, PRODUCT_TWO];
@@ -199,6 +209,8 @@ describe("CartPage Component", () => {
     });
 
     it("renders DropIn and enables Make Payment when user has token, cart and address", async () => {
+      // Summary: Verifies checkout becomes actionable only when the user is authenticated and has an address plus cart items.
+      // Flow: mock authed user with address, one cart item, and token response -> render component -> assert DropIn renders and Make Payment is enabled.
       // ------------ Arrange ------------
       mockAuthValue = {
         token: "auth-token",
@@ -223,6 +235,8 @@ describe("CartPage Component", () => {
     });
 
     it("shows Update Address button for authenticated user without address and navigates to profile", async () => {
+      // Summary: Verifies users missing an address are redirected toward profile completion instead of payment.
+      // Flow: mock authed user without address -> render component -> click Update Address -> assert profile navigation call.
       // ------------ Arrange ------------
       mockAuthValue = {
         token: "auth-token",
@@ -247,6 +261,8 @@ describe("CartPage Component", () => {
 
   describe("Unhappy Path Tests - when something breaks, the component", () => {
     it("shows login prompt for checkout when user is unauthenticated", async () => {
+      // Summary: Verifies checkout attempts by guests route them to the login page with cart return state.
+      // Flow: mock guest auth and seeded cart -> render component -> click login-to-checkout button -> assert navigate call with /cart state.
       // ------------ Arrange ------------
       mockAuthValue = { user: null, token: "" };
       mockCartValue = [PRODUCT_ONE];
@@ -268,6 +284,8 @@ describe("CartPage Component", () => {
     });
 
     it("handles token API failure gracefully without crashing", async () => {
+      // Summary: Verifies token-fetch failure leaves the page usable and hides payment UI.
+      // Flow: mock guest auth, seeded cart, and token API error -> render component -> assert Cart Summary remains visible and DropIn is absent.
       // ------------ Arrange ------------
       mockAuthValue = { user: null, token: "" };
       mockCartValue = [PRODUCT_ONE];
@@ -292,6 +310,8 @@ describe("CartPage Component", () => {
     });
 
     it("resets loading state when requesting payment method fails", async () => {
+      // Summary: Verifies a DropIn payment-method error resets button state and avoids posting payment.
+      // Flow: mock authed user with address, cart item, token response, and failing requestPaymentMethod -> render component -> click Make Payment -> assert button re-enables and no POST occurs.
       // ------------ Arrange ------------
       mockAuthValue = {
         token: "auth-token",
@@ -325,6 +345,8 @@ describe("CartPage Component", () => {
     });
 
     it("does not render DropIn or Make Payment when user has no address", async () => {
+      // Summary: Verifies checkout widgets are hidden when the authenticated user has not supplied an address.
+      // Flow: mock authed user without address and token response -> render component -> assert Update Address appears while DropIn and Make Payment stay hidden.
       // ------------ Arrange ------------
       mockAuthValue = {
         token: "auth-token",
@@ -351,6 +373,8 @@ describe("CartPage Component", () => {
     });
 
     it("disables Make Payment button when DropIn instance is unavailable", async () => {
+      // Summary: Verifies checkout remains blocked when the DropIn instance never initializes.
+      // Flow: mock authed user with address, cart item, token response, and no DropIn instance callback -> render component -> assert Make Payment is disabled.
       // ------------ Arrange ------------
       mockAuthValue = {
         token: "auth-token",

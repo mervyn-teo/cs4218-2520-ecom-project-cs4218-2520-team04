@@ -136,6 +136,8 @@ describe("[Integration] Guest checkout login redirect", () => {
   });
 
   it("redirects guests to login, returns to cart after successful authentication, and reveals checkout UI", async () => {
+    // Summary: Verifies the guest checkout redirect preserves cart state and restores checkout access after login.
+    // Flow: open cart as guest -> click login-to-checkout -> assert redirect state -> submit credentials -> assert return to cart with auth, address, drop-in, and payment button.
     // Arrange + Act
     renderLoginCheckoutFlow();
 

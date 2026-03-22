@@ -128,6 +128,8 @@ describe("Auth middleware - protected product routes", () => {
 describe("GET /api/v1/product/braintree/token", () => {
   describe("failure path", () => {
     test("rejects an unauthenticated request", async () => {
+      // Summary: Verifies the token route is protected and rejects requests without a JWT.
+      // Flow: call token endpoint without Authorization header -> assert 401 status and auth error body.
       // Arrange
 
       // Act
@@ -165,6 +167,8 @@ describe("GET /api/v1/product/braintree/token", () => {
       });
 
       test("returns 500 when Braintree client token generation fails for an authenticated user", async () => {
+        // Summary: Verifies gateway token-generation failures are surfaced to authenticated clients.
+        // Flow: seed shopper and JWT -> force mocked Braintree token generation error -> call token endpoint -> assert 500 response body.
         // Arrange
         const errorResponse = { message: "token generation failed" };
         getMockBraintreeGateway().clientToken.generate.mockImplementationOnce(
@@ -208,6 +212,8 @@ describe("GET /api/v1/product/braintree/token", () => {
       });
 
       test("forwards the generated client token response as-is", async () => {
+        // Summary: Verifies a successful Braintree token response is forwarded unchanged by the route.
+        // Flow: seed shopper and JWT -> mock successful client token generation -> call token endpoint -> assert 200 body and gateway invocation.
         // Arrange
         const responseObj = { clientToken: "token-123" };
         getMockBraintreeGateway().clientToken.generate.mockImplementationOnce(
@@ -233,6 +239,8 @@ describe("GET /api/v1/product/braintree/token", () => {
 describe("POST /api/v1/product/braintree/payment", () => {
   describe("failure path", () => {
     test("rejects an unauthenticated request and does not persist an order", async () => {
+      // Summary: Verifies the payment route is protected and cannot create orders for guests.
+      // Flow: seed category and product -> POST payment without JWT -> assert 401 response and unchanged order count.
       // Arrange
       const category = await categoryModel.create({
         name: "Electronics",
@@ -314,6 +322,8 @@ describe("POST /api/v1/product/braintree/payment", () => {
       });
 
       test("returns 500 and does not persist an order when Braintree sale fails", async () => {
+        // Summary: Verifies payment-gateway sale failures do not create partial order data.
+        // Flow: seed shopper, JWT, category, and product -> force mocked sale failure -> POST payment -> assert 500 response and unchanged order count.
         // Arrange
         const errorResponse = { message: "payment failed" };
         const orderCountBeforeRequest = await orderModel.countDocuments({});
@@ -392,6 +402,8 @@ describe("POST /api/v1/product/braintree/payment", () => {
       });
 
       test("returns ok true and persists an order with products, payment, and buyer", async () => {
+        // Summary: Verifies successful payment persists the complete order document with buyer, products, and payment payload.
+        // Flow: seed shopper, JWT, and products -> mock successful sale -> POST payment -> wait for saved order -> assert response and persisted order fields.
         // Arrange
         const cart = [
           { _id: firstProduct._id.toString(), price: firstProduct.price },
@@ -480,6 +492,8 @@ describe("Complete Braintree route flow - token to payment", () => {
   });
 
   test("gets a client token first, then completes payment and creates an order", async () => {
+    // Summary: Verifies the full backend checkout sequence from token retrieval to successful order creation.
+    // Flow: seed shopper, JWT, category, and products -> mock token generation -> mock payment approval -> GET token -> POST payment -> assert saved order.
     // Arrange
     const tokenResponse = { clientToken: "sandbox-client-token-4242" };
     const paymentResponse = { transaction: { id: "txn-flow", status: "submitted" } };
