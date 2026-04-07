@@ -1,8 +1,8 @@
 import { hashPassword, comparePassword } from './authHelper';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 // Mock the bcrypt module
-jest.mock('bcrypt');
+jest.mock('bcryptjs');
 
 describe('Password Utilities', () => {
 

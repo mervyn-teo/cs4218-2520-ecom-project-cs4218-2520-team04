@@ -15,7 +15,7 @@ import mongoose from "mongoose";
 import request from "supertest";
 import express from "express";
 import jwt from "jsonwebtoken";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 import { MongoMemoryServer } from "mongodb-memory-server";
 import authRoute from "../../../../routes/authRoute.js";
 import userModel from "../../../../models/userModel.js";
