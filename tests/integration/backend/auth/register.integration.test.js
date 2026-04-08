@@ -20,7 +20,7 @@ import { MongoMemoryServer } from "mongodb-memory-server";
 import userModel from "../../../../models/userModel.js";
 import { registerController } from "../../../../controllers/authController.js";
 import { hashPassword, comparePassword } from "../../../../helpers/authHelper.js";
-import bcrypt from "bcryptjs";
+import bcrypt from "bcrypt";
 
 // Silence console noise during tests
 beforeAll(() => {
