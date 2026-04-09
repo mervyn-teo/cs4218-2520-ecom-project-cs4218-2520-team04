@@ -80,7 +80,8 @@ const getBlockedScope = (store, key, now, scope) => {
   return null;
 };
 
-export const normalizeEmail = (email = "") => email.trim().toLowerCase();
+export const normalizeEmail = (email = "") =>
+  typeof email === "string" ? email.trim().toLowerCase() : "";
 
 export const getRequestIp = (req) => {
   return (

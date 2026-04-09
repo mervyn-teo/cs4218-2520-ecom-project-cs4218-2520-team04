@@ -6,6 +6,7 @@ import fs from "fs";
 import slugify from "slugify";
 import braintree from "braintree";
 import dotenv from "dotenv";
+import { exceedsMaxLength, INPUT_LIMITS } from "../helpers/inputValidation.js";
 
 dotenv.config();
 
@@ -488,6 +489,12 @@ export const productListController = async (req, res) => {
 export const searchProductController = async (req, res) => {
   try {
     const { keyword } = req.params;
+    if (exceedsMaxLength(keyword, INPUT_LIMITS.searchKeyword)) {
+      return res.status(400).send({
+        success: false,
+        message: "Search keyword is too long",
+      });
+    }
     const results = await productModel
       .find({
         $or: [

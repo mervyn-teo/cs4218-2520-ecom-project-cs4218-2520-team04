@@ -12,6 +12,11 @@ import {
 import {
   validatePasswordStrength,
 } from "../helpers/passwordPolicy.js";
+import {
+  exceedsMaxLength,
+  INPUT_LIMITS,
+  isTextString,
+} from "../helpers/inputValidation.js";
 import JWT from "jsonwebtoken";
 
 const INVALID_LOGIN_MESSAGE = "Invalid email or password";
@@ -24,11 +29,35 @@ export const registerController = async (req, res) => {
     const normalizedEmail = normalizeEmail(email);
     //validations
     if (!name) return res.status(400).send({ message: "Name is required" });
-    if (!normalizedEmail) return res.status(400).send({ message: "Email is required" });
     if (!password) return res.status(400).send({ message: "Password is required" });
     if (!phone) return res.status(400).send({ message: "Phone number is required" });
     if (!address) return res.status(400).send({ message: "Address is required" });
     if (!answer) return res.status(400).send({ message: "Answer is required" });
+    if (![name, email, password, phone, address, answer].every(isTextString)) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid input format. Fields must be text strings.",
+      });
+    }
+    if (!normalizedEmail) return res.status(400).send({ message: "Email is required" });
+    if (exceedsMaxLength(name, INPUT_LIMITS.name)) {
+      return res.status(400).send({ success: false, message: "Name is too long" });
+    }
+    if (exceedsMaxLength(email, INPUT_LIMITS.email)) {
+      return res.status(400).send({ success: false, message: "Email is too long" });
+    }
+    if (exceedsMaxLength(password, INPUT_LIMITS.password)) {
+      return res.status(400).send({ success: false, message: "Password is too long" });
+    }
+    if (exceedsMaxLength(phone, INPUT_LIMITS.phone)) {
+      return res.status(400).send({ success: false, message: "Phone number is too long" });
+    }
+    if (exceedsMaxLength(address, INPUT_LIMITS.address)) {
+      return res.status(400).send({ success: false, message: "Address is too long" });
+    }
+    if (exceedsMaxLength(answer, INPUT_LIMITS.answer)) {
+      return res.status(400).send({ success: false, message: "Answer is too long" });
+    }
 
     //check user
     const existingUser = await userModel.findOne({ email: normalizedEmail });
@@ -115,6 +144,21 @@ export const loginController = async (req, res) => {
 
     //validation
     if (!normalizedEmail || !password) {
+      return res.status(400).send({
+        success: false,
+        message: INVALID_LOGIN_MESSAGE,
+      });
+    }
+    if (![email, password].every(isTextString)) {
+      return res.status(400).send({
+        success: false,
+        message: INVALID_LOGIN_MESSAGE,
+      });
+    }
+    if (
+      exceedsMaxLength(email, INPUT_LIMITS.email) ||
+      exceedsMaxLength(password, INPUT_LIMITS.password)
+    ) {
       return res.status(400).send({
         success: false,
         message: INVALID_LOGIN_MESSAGE,
@@ -235,6 +279,32 @@ export const updateProfileController = async (req, res) => {
         success: false,
         message: "User not found",
         });
+    }
+    if (
+      (name !== undefined && !isTextString(name)) ||
+      (password !== undefined && password !== "" && !isTextString(password)) ||
+      (phone !== undefined && !isTextString(phone)) ||
+      (address !== undefined && !isTextString(address))
+    ) {
+      return res.status(400).send({
+        success: false,
+        message: "Invalid input format. Fields must be text strings.",
+      });
+    }
+    if (name && exceedsMaxLength(name, INPUT_LIMITS.name)) {
+      return res.status(400).send({ success: false, message: "Name is too long" });
+    }
+    if (password && exceedsMaxLength(password, INPUT_LIMITS.password)) {
+      return res.status(400).send({ success: false, message: "Password is too long" });
+    }
+    if (phone && exceedsMaxLength(phone, INPUT_LIMITS.phone)) {
+      return res.status(400).send({
+        success: false,
+        message: "Phone number is too long",
+      });
+    }
+    if (address && exceedsMaxLength(address, INPUT_LIMITS.address)) {
+      return res.status(400).send({ success: false, message: "Address is too long" });
     }
     //password
     if (password) {
