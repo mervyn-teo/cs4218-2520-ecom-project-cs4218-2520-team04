@@ -2,21 +2,36 @@ import userModel from "../models/userModel.js";
 import orderModel from "../models/orderModel.js";
 
 import { comparePassword, hashPassword } from "./../helpers/authHelper.js";
+import {
+  clearFailedLoginAttempts,
+  getLoginThrottleState,
+  getRequestIp,
+  normalizeEmail,
+  recordFailedLoginAttempt,
+} from "../helpers/loginProtection.js";
+import {
+  validatePasswordStrength,
+} from "../helpers/passwordPolicy.js";
 import JWT from "jsonwebtoken";
+
+const INVALID_LOGIN_MESSAGE = "Invalid email or password";
+const LOGIN_THROTTLED_MESSAGE =
+  "Too many failed login attempts. Please try again later.";
 
 export const registerController = async (req, res) => {
   try {
     const { name, email, password, phone, address, answer } = req.body;
+    const normalizedEmail = normalizeEmail(email);
     //validations
     if (!name) return res.status(400).send({ message: "Name is required" });
-    if (!email) return res.status(400).send({ message: "Email is required" });
+    if (!normalizedEmail) return res.status(400).send({ message: "Email is required" });
     if (!password) return res.status(400).send({ message: "Password is required" });
     if (!phone) return res.status(400).send({ message: "Phone number is required" });
     if (!address) return res.status(400).send({ message: "Address is required" });
     if (!answer) return res.status(400).send({ message: "Answer is required" });
 
     //check user
-    const existingUser = await userModel.findOne({ email });
+    const existingUser = await userModel.findOne({ email: normalizedEmail });
     //existing user
     if (existingUser) {
       return res.status(200).send({
@@ -24,12 +39,16 @@ export const registerController = async (req, res) => {
         message: "Already registered, please log in",
       });
     }
+    const passwordValidation = validatePasswordStrength(password);
+    if (!passwordValidation.valid) {
+      return res.status(400).send({ success: false, message: passwordValidation.message });
+    }
     //register user
     const hashedPassword = await hashPassword(password);
     //save
     const user = await new userModel({
       name,
-      email,
+      email: normalizedEmail,
       phone,
       address,
       password: hashedPassword,
@@ -61,28 +80,59 @@ export const registerController = async (req, res) => {
 export const loginController = async (req, res) => {
   try {
     const { email, password } = req.body;
-    //validation
-    if (!email || !password) {
-      return res.status(404).send({
+    const normalizedEmail = normalizeEmail(email);
+    const requestIp = getRequestIp(req);
+    const throttleState = getLoginThrottleState({
+      email: normalizedEmail,
+      ip: requestIp,
+    });
+
+    if (throttleState.blocked) {
+      const retryAfterSeconds = Math.max(
+        1,
+        Math.ceil(throttleState.retryAfterMs / 1000)
+      );
+
+      res.set("Retry-After", String(retryAfterSeconds));
+      return res.status(429).send({
         success: false,
-        message: "Invalid email or password",
+        message: LOGIN_THROTTLED_MESSAGE,
+        retryAfterSeconds,
+      });
+    }
+
+    const failLoginAttempt = () => {
+      recordFailedLoginAttempt({
+        email: normalizedEmail,
+        ip: requestIp,
+      });
+
+      return res.status(401).send({
+        success: false,
+        message: INVALID_LOGIN_MESSAGE,
+      });
+    };
+
+    //validation
+    if (!normalizedEmail || !password) {
+      return res.status(400).send({
+        success: false,
+        message: INVALID_LOGIN_MESSAGE,
       });
     }
     //check user
-    const user = await userModel.findOne({ email });
+    const user = await userModel.findOne({ email: normalizedEmail });
     if (!user) {
-      return res.status(404).send({
-        success: false,
-        message: "Email is not registered",
-      });
+      return failLoginAttempt();
     }
     const match = await comparePassword(password, user.password);
     if (!match) {
-      return res.status(200).send({
-        success: false,
-        message: "Invalid password",
-      });
+      return failLoginAttempt();
     }
+    clearFailedLoginAttempts({
+      email: normalizedEmail,
+      ip: requestIp,
+    });
     //token
     const token = await JWT.sign({ _id: user._id }, process.env.JWT_SECRET, {
       expiresIn: "7d",
@@ -124,6 +174,13 @@ export const forgotPasswordController = async (req, res) => {
     if (!newPassword) {
       return res.status(400).send({ message: "New password is required" });
     }
+    const passwordValidation = validatePasswordStrength(newPassword);
+    if (!passwordValidation.valid) {
+      return res.status(400).send({
+        success: false,
+        message: passwordValidation.message,
+      });
+    }
 
     // Mervyn Teo Zi Yan - Added type checks for better input validation
     if (typeof email !== "string" || typeof answer !== "string" || typeof newPassword !== "string") {
@@ -134,7 +191,7 @@ export const forgotPasswordController = async (req, res) => {
     }
 
     //check
-    const user = await userModel.findOne({ email, answer });
+    const user = await userModel.findOne({ email: normalizeEmail(email), answer });
     //validation
     if (!user) {
       return res.status(404).send({
@@ -180,11 +237,14 @@ export const updateProfileController = async (req, res) => {
         });
     }
     //password
-    if (password && password.length < 6) {
+    if (password) {
+      const passwordValidation = validatePasswordStrength(password);
+      if (!passwordValidation.valid) {
       return res.status(400).send({
         success: false,
-        message: "Password must be at least 6 characters long",
+        message: passwordValidation.message,
       });
+      }
     }
     const hashedPassword = password ? await hashPassword(password) : undefined;
     const updatedUser = await userModel.findByIdAndUpdate(
