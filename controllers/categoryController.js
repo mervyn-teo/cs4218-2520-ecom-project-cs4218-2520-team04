@@ -119,7 +119,7 @@ export const deleteCategoryController = async (req, res) => {
 
     // Check if any products belong to this category
     const products = await productModel.find({ category: id });
-    if (products.length > 0) {
+    if (products.length > 1) {
       return res.status(400).send({
         success: false,
         message: "Cannot delete category with associated products",

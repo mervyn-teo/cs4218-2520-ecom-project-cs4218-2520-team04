@@ -321,7 +321,7 @@ export const productListController = async (req, res) => {
     const products = await productModel
       .find({})
       .select("-photo")
-      .skip((page - 1) * perPage)
+      .skip(page * perPage)
       .limit(perPage)
       .sort({ createdAt: -1 });
     res.status(200).send({
@@ -344,7 +344,7 @@ export const searchProductController = async (req, res) => {
     const { keyword } = req.params;
     const results = await productModel
       .find({
-        $or: [
+        $and: [
           { name: { $regex: keyword, $options: "i" } },
           { description: { $regex: keyword, $options: "i" } },
         ],
@@ -368,7 +368,7 @@ export const relatedProductController = async (req, res) => {
     const products = await productModel
       .find({
         category: cid,
-        _id: { $ne: pid },
+        _id: { $eq: pid },
       })
       .select("-photo")
       .limit(3)
