@@ -12,5 +12,10 @@ class GraphState(TypedDict, total=False):
     test_inventory: TestInventory
     gap_plan: list[GapPlanItem]
     selected_gap_ids: list[str]
+    active_items: list[GapPlanItem]
     write_results: list[WriteResult]
+    completed_results: list[WriteResult]
+    failed_gap_ids: list[str]
+    failure_feedback: dict[str, str]
+    retry_count: int
     notes: list[str]

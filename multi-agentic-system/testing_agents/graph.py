@@ -51,12 +51,67 @@ def build_write_graph(runtime: AgentRuntime):
     graph = StateGraph(GraphState)
 
     def writer_agent(state: GraphState) -> GraphState:
-        runtime.tracer.supervisor("Calling subagents InteractiveSelectionAgent, TestDesignAgent, TestWriterAgent, VerificationAgent")
-        write_results = runtime.write_selected_fixes(state["gap_plan"], state["selected_gap_ids"])
+        attempt = state.get("retry_count", 0) + 1
+        runtime.tracer.supervisor("Calling subagents TestDesignAgent and TestWriterAgent")
+        write_results = runtime.write_fix_batch(
+            state.get("active_items", []),
+            failure_feedback=state.get("failure_feedback", {}),
+            attempt=attempt,
+        )
+        return {"write_results": write_results, "retry_count": attempt}
+
+    def verification_agent(state: GraphState) -> GraphState:
+        runtime.tracer.supervisor("Calling subagent VerificationAgent")
+        verified_results, failed_gap_ids, failure_feedback = runtime.verify_fix_batch(
+            state.get("active_items", []),
+            state.get("write_results", []),
+        )
+        completed = list(state.get("completed_results", []))
+        active_items = state.get("active_items", [])
+        if failed_gap_ids and state.get("retry_count", 0) < runtime.config.write_retry_limit and not runtime.config.dry_run:
+            completed.extend([item for item in verified_results if item.gap_id not in failed_gap_ids])
+            next_active = [item for item in active_items if item.gap_id in failed_gap_ids]
+            return {
+                "completed_results": completed,
+                "active_items": next_active,
+                "failed_gap_ids": failed_gap_ids,
+                "failure_feedback": failure_feedback,
+            }
+
+        completed.extend(verified_results)
+        return {
+            "completed_results": completed,
+            "active_items": [],
+            "failed_gap_ids": [],
+            "failure_feedback": {},
+        }
+
+    def repair_agent(state: GraphState) -> GraphState:
+        runtime.tracer.supervisor("Calling subagent RepairAgent")
+        repaired_feedback = runtime.repair_failed_fixes(
+            state.get("active_items", []),
+            state.get("failure_feedback", {}),
+            state.get("retry_count", 0),
+        )
+        return {"failure_feedback": repaired_feedback}
+
+    def finalize_agent(state: GraphState) -> GraphState:
+        write_results = state.get("completed_results", [])
         runtime.artifacts.write_json("write_report.json", [item.to_dict() for item in write_results])
         return {"write_results": write_results}
 
+    def route_after_verify(state: GraphState) -> str:
+        if state.get("active_items"):
+            return "repair"
+        return "finalize"
+
     graph.add_node("write", writer_agent)
+    graph.add_node("verify", verification_agent)
+    graph.add_node("repair", repair_agent)
+    graph.add_node("finalize", finalize_agent)
     graph.add_edge(START, "write")
-    graph.add_edge("write", END)
+    graph.add_edge("write", "verify")
+    graph.add_conditional_edges("verify", route_after_verify, {"repair": "repair", "finalize": "finalize"})
+    graph.add_edge("repair", "write")
+    graph.add_edge("finalize", END)
     return graph.compile()

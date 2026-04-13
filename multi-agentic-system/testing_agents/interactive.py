@@ -43,10 +43,13 @@ def format_gap_item(item: GapPlanItem, index: int | None = None) -> str:
     suite = f"{Fore.MAGENTA}{item.suite_type}{Style.RESET_ALL}"
     source = f"{Fore.BLUE}{item.source_file}{Style.RESET_ALL}"
     target = f"{Fore.GREEN}{item.target_file}{Style.RESET_ALL}"
+    case_color = Fore.RED + Style.BRIGHT if item.case_type == "negative" else Fore.GREEN + Style.BRIGHT
+    case_label = f"{case_color}{item.case_type.upper()}{Style.RESET_ALL}"
     title = f"{label}{color_priority(item.priority)} {Style.BRIGHT}{item.behavior_summary}{Style.RESET_ALL}"
     return "\n".join(
         [
             title,
+            f"    case:   {case_label}",
             f"    source: {source}",
             f"    target: {target} ({suite})",
             f"    why:    {item.rationale}",

@@ -84,6 +84,7 @@ class CoverageAssessment:
 class GapPlanItem:
     gap_id: str
     priority: str
+    case_type: str
     source_file: str
     source_kind: str
     behavior_summary: str
@@ -108,6 +109,7 @@ class WriteResult:
     gap_id: str
     target_file: str
     status: str
+    attempts: int = 1
     verification_command: str | None = None
     verification_status: str | None = None
     notes: list[str] = field(default_factory=list)

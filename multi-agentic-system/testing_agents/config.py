@@ -26,6 +26,8 @@ class RuntimeConfig:
     priority: str | None = None
     dry_run: bool = False
     verbose: bool = True
+    backend_concurrency: int = int(os.environ.get("BACKEND_ANALYST_CONCURRENCY", "6"))
+    write_retry_limit: int = int(os.environ.get("WRITE_RETRY_LIMIT", "2"))
     paths: tuple[str, ...] = ()
 
     def ensure_directories(self) -> None:

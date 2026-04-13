@@ -98,7 +98,18 @@ def run_write(runtime: AgentRuntime, config: RuntimeConfig) -> int:
         return 0
 
     graph = build_write_graph(runtime)
-    result = graph.invoke({"config": config, "gap_plan": gap_plan, "selected_gap_ids": selected_gap_ids})
+    result = graph.invoke(
+        {
+            "config": config,
+            "gap_plan": gap_plan,
+            "selected_gap_ids": selected_gap_ids,
+            "active_items": selected_items,
+            "completed_results": [],
+            "failed_gap_ids": [],
+            "failure_feedback": {},
+            "retry_count": 0,
+        }
+    )
     write_results = result["write_results"]
     print(f"{Fore.GREEN}{Style.BRIGHT}Write complete:{Style.RESET_ALL} {len(write_results)} fixes processed.")
     for item in write_results:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import sys
+import threading
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -42,54 +44,62 @@ class ConsoleTracer:
     supervisor_line: str = ""
     panels: dict[str, AgentPanel] = field(default_factory=dict)
     panel_order: list[str] = field(default_factory=list)
-    current_agent: str | None = None
+    current_agent: ContextVar[str | None] = field(default_factory=lambda: ContextVar("current_agent", default=None))
+    render_lock: threading.RLock = field(default_factory=threading.RLock)
 
     def supervisor(self, message: str) -> None:
         if not self.enabled:
             return
-        self.supervisor_line = f"{Fore.MAGENTA}{Style.BRIGHT}Supervisor{Style.RESET_ALL}: {message}"
-        self._render_or_print(self.supervisor_line)
+        with self.render_lock:
+            self.supervisor_line = f"{Fore.MAGENTA}{Style.BRIGHT}Supervisor{Style.RESET_ALL}: {message}"
+            self._render_or_print(self.supervisor_line)
 
     def agent_start(self, agent_name: str, message: str) -> None:
         if not self.enabled:
             return
-        panel = self._get_panel(agent_name)
-        panel.status = "running"
-        panel.detail = message
-        panel.tool_line = ""
-        self.current_agent = agent_name
-        self._render_or_print(f"{Fore.CYAN}{Style.BRIGHT}{agent_name}{Style.RESET_ALL}: {message}")
+        with self.render_lock:
+            panel = self._get_panel(agent_name)
+            panel.status = "running"
+            panel.detail = message
+            panel.tool_line = ""
+            self.current_agent.set(agent_name)
+            self._render_or_print(f"{Fore.CYAN}{Style.BRIGHT}{agent_name}{Style.RESET_ALL}: {message}")
 
     def agent_done(self, agent_name: str, message: str) -> None:
         if not self.enabled:
             return
-        panel = self._get_panel(agent_name)
-        panel.status = "done"
-        panel.detail = message
-        panel.tool_line = ""
-        if self.current_agent == agent_name:
-            self.current_agent = None
-        self._render_or_print(f"{Fore.CYAN}{agent_name}{Style.RESET_ALL}: {message}")
+        with self.render_lock:
+            panel = self._get_panel(agent_name)
+            panel.status = "done"
+            panel.detail = message
+            panel.tool_line = ""
+            if self.current_agent.get() == agent_name:
+                self.current_agent.set(None)
+            self._render_or_print(f"{Fore.CYAN}{agent_name}{Style.RESET_ALL}: {message}")
 
     def tool(self, tool_name: str, target: str, status: str) -> None:
         if not self.enabled:
             return
-        if self.live_mode and self.current_agent:
-            panel = self._get_panel(self.current_agent)
-            panel.tool_line = f"{tool_name}: {target} -> {status}"
-            self._render_dashboard()
-            return
-        print(f"{Fore.YELLOW}[TOOL]{Style.RESET_ALL} {tool_name}: {target} -> {status}")
+        with self.render_lock:
+            agent_name = self.current_agent.get()
+            if self.live_mode and agent_name:
+                panel = self._get_panel(agent_name)
+                panel.tool_line = f"{tool_name}: {target} -> {status}"
+                self._render_dashboard()
+                return
+            print(f"{Fore.YELLOW}[TOOL]{Style.RESET_ALL} {tool_name}: {target} -> {status}")
 
     def llm_call(self, role: str, model: str, message: str) -> None:
         if not self.enabled:
             return
-        if self.live_mode and self.current_agent:
-            panel = self._get_panel(self.current_agent)
-            panel.tool_line = f"LLM {role}: {model} | {message}"
-            self._render_dashboard()
-            return
-        print(f"{Fore.BLUE}{Style.BRIGHT}[LLM {role}]{Style.RESET_ALL} {model} | {message}")
+        with self.render_lock:
+            agent_name = self.current_agent.get()
+            if self.live_mode and agent_name:
+                panel = self._get_panel(agent_name)
+                panel.tool_line = f"LLM {role}: {model} | {message}"
+                self._render_dashboard()
+                return
+            print(f"{Fore.BLUE}{Style.BRIGHT}[LLM {role}]{Style.RESET_ALL} {model} | {message}")
 
     def _get_panel(self, agent_name: str) -> AgentPanel:
         panel = self.panels.get(agent_name)

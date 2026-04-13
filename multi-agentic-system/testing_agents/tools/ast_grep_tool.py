@@ -15,12 +15,7 @@ class AstGrepTool:
         self.tracer = tracer
 
     def ensure_available(self) -> None:
-        result = subprocess.run(
-            [self.binary, "--version"],
-            cwd=self.repo_root,
-            text=True,
-            capture_output=True,
-        )
+        result = self._run_command([self.binary, "--version"])
         if result.returncode != 0:
             raise RuntimeError(
                 "ast-grep is required but not available on PATH. "
@@ -39,26 +34,50 @@ class AstGrepTool:
         if lang:
             command.extend(["--lang", lang])
         command.extend(paths)
-        result = subprocess.run(
-            command,
-            cwd=self.repo_root,
-            text=True,
-            capture_output=True,
-        )
-        if result.returncode == 1 and not result.stdout.strip():
+        result = self._run_command(command)
+        stdout = result.stdout or ""
+        stderr = result.stderr or ""
+        if result.returncode == 1 and not stdout.strip():
             return []
-        if "Cannot parse query as a valid pattern" in result.stderr:
+        if "Cannot parse query as a valid pattern" in stderr:
             return []
         if result.returncode not in {0, 1}:
-            raise RuntimeError(result.stderr.strip() or f"ast-grep failed for pattern: {pattern}")
+            raise RuntimeError(stderr.strip() or f"ast-grep failed for pattern: {pattern}")
 
         matches: list[dict[str, Any]] = []
-        for line in result.stdout.splitlines():
+        for line in stdout.splitlines():
             line = line.strip()
             if not line:
                 continue
-            matches.append(json.loads(line))
+            try:
+                matches.append(json.loads(line))
+            except json.JSONDecodeError:
+                if self.tracer:
+                    target = paths[0] if len(paths) == 1 else f"{len(paths)} files"
+                    self.tracer.tool("AstGrepTool.run_pattern", target, "skipped malformed json line")
+                continue
         if self.tracer:
             target = paths[0] if len(paths) == 1 else f"{len(paths)} files"
             self.tracer.tool("AstGrepTool.run_pattern", target, f"{len(matches)} matches")
         return matches
+
+    def _run_command(self, command: list[str]) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(
+            command,
+            cwd=self.repo_root,
+            capture_output=True,
+            text=False,
+        )
+        return subprocess.CompletedProcess(
+            args=result.args,
+            returncode=result.returncode,
+            stdout=self._decode_output(result.stdout),
+            stderr=self._decode_output(result.stderr),
+        )
+
+    def _decode_output(self, payload: bytes | str | None) -> str:
+        if payload is None:
+            return ""
+        if isinstance(payload, str):
+            return payload
+        return payload.decode("utf-8", errors="replace")

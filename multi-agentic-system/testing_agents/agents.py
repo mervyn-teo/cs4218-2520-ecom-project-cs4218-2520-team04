@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import re
 from pathlib import Path
+from typing import Iterable
 
 from .config import RuntimeConfig
 from .llm import OpenAILLM
@@ -99,62 +101,105 @@ class AgentRuntime:
         return inventory
 
     def analyze_gaps(self, repo_map: RepoMap, inventory: TestInventory) -> list[GapPlanItem]:
-        self.tracer.agent_start("GapAnalystSupervisor", "Dispatching backend/frontend gap analysis")
+        self.tracer.agent_start(
+            "GapAnalystSupervisor",
+            f"Dispatching backend/frontend gap analysis (backend concurrency={self.config.backend_concurrency})",
+        )
         candidate_files = [path for path in repo_map.source_files if self._within_requested_scope(path)]
+        backend_files = [path for path in candidate_files if not path.startswith("client/src/") and self._source_kind(path) != "test"]
+        frontend_files = [path for path in candidate_files if path.startswith("client/src/") and self._source_kind(path) != "test"]
+
         planned: list[GapPlanItem] = []
-
-        for source_file in candidate_files:
-            source_kind = self._source_kind(source_file)
-            if source_kind == "test":
-                continue
-            agent_name = "FrontendGapAnalystAgent" if source_file.startswith("client/src/") else "BackendGapAnalystAgent"
-            self.tracer.agent_start(agent_name, f"Reviewing {source_file} ({source_kind})")
-
-            behaviors = self.js_heuristics.detect_behaviors(source_file, source_kind)
-            for behavior in behaviors:
-                locator_candidates = self.locator.rank_candidates(source_file, behavior.suite_hint, repo_map, inventory)
-                coverage = self.coverage.assess(behavior, locator_candidates, repo_map)
-                if coverage.status == "covered":
-                    continue
-
-                best_candidate = locator_candidates[0]
-                priority = self._priority_for(source_file, behavior.category)
-                behavior_summary, rationale, scenario_summary, setup_notes, assertion_notes = self._design_gap(
-                    source_file, behavior, best_candidate
-                )
-                planned.append(
-                    GapPlanItem(
-                        gap_id=behavior.behavior_id,
-                        priority=priority,
-                        source_file=source_file,
-                        source_kind=source_kind,
-                        behavior_summary=behavior_summary,
-                        rationale=rationale,
-                        suite_type=best_candidate.suite_type,
-                        target_file=best_candidate.target_file,
-                        target_command=best_candidate.expected_test_command,
-                        append_mode=best_candidate.append_vs_create,
-                        coverage_status=coverage.status,
-                        confidence=min(0.99, max(behavior.confidence, coverage.confidence)),
-                        scenario_summary=scenario_summary,
-                        setup_notes=setup_notes,
-                        assertion_notes=assertion_notes,
-                        evidence=behavior.evidence + coverage.evidence + [best_candidate.reason],
-                    )
-                )
-            self.tracer.agent_done(agent_name, f"Found {len(behaviors)} behavior candidate(s) in {source_file}")
+        if backend_files:
+            planned.extend(asyncio.run(self._analyze_backend_files(backend_files, repo_map, inventory)))
+        for source_file in frontend_files:
+            planned.extend(self._analyze_file(source_file, repo_map, inventory, "FrontendGapAnalystAgent"))
 
         deduped = self._dedupe_gap_plan(planned)
         sorted_items = self._sort_and_limit(deduped)
         self.tracer.agent_done("GapTriagerAgent", f"Triaged {len(sorted_items)} actionable gaps from {len(planned)} raw findings")
         return sorted_items
 
-    def write_selected_fixes(self, gap_plan: list[GapPlanItem], selected_ids: list[str]) -> list[WriteResult]:
-        self.tracer.agent_start("InteractiveSelectionAgent", f"Received {len(selected_ids)} approved fix selection(s)")
-        chosen = [item for item in gap_plan if item.gap_id in selected_ids]
-        results: list[WriteResult] = []
+    async def _analyze_backend_files(
+        self,
+        backend_files: list[str],
+        repo_map: RepoMap,
+        inventory: TestInventory,
+    ) -> list[GapPlanItem]:
+        semaphore = asyncio.Semaphore(max(1, self.config.backend_concurrency))
 
-        for item in chosen:
+        async def run_file(source_file: str) -> list[GapPlanItem]:
+            async with semaphore:
+                return await asyncio.to_thread(
+                    self._analyze_file,
+                    source_file,
+                    repo_map,
+                    inventory,
+                    "BackendGapAnalystAgent",
+                )
+
+        results = await asyncio.gather(*(run_file(source_file) for source_file in backend_files))
+        flattened: list[GapPlanItem] = []
+        for items in results:
+            flattened.extend(items)
+        return flattened
+
+    def _analyze_file(
+        self,
+        source_file: str,
+        repo_map: RepoMap,
+        inventory: TestInventory,
+        agent_name: str,
+    ) -> list[GapPlanItem]:
+        source_kind = self._source_kind(source_file)
+        self.tracer.agent_start(agent_name, f"Reviewing {source_file} ({source_kind})")
+
+        planned: list[GapPlanItem] = []
+        behaviors = self.js_heuristics.detect_behaviors(source_file, source_kind)
+        for behavior in behaviors:
+            locator_candidates = self.locator.rank_candidates(source_file, behavior.suite_hint, repo_map, inventory)
+            coverage = self.coverage.assess(behavior, locator_candidates, repo_map)
+            if coverage.status == "covered":
+                continue
+
+            best_candidate = locator_candidates[0]
+            priority = self._priority_for(source_file, behavior.category)
+            case_type, behavior_summary, rationale, scenario_summary, setup_notes, assertion_notes = self._design_gap(
+                source_file, behavior, best_candidate
+            )
+            planned.append(
+                GapPlanItem(
+                    gap_id=behavior.behavior_id,
+                    priority=priority,
+                    case_type=case_type,
+                    source_file=source_file,
+                    source_kind=source_kind,
+                    behavior_summary=behavior_summary,
+                    rationale=rationale,
+                    suite_type=best_candidate.suite_type,
+                    target_file=best_candidate.target_file,
+                    target_command=best_candidate.expected_test_command,
+                    append_mode=best_candidate.append_vs_create,
+                    coverage_status=coverage.status,
+                    confidence=min(0.99, max(behavior.confidence, coverage.confidence)),
+                    scenario_summary=scenario_summary,
+                    setup_notes=setup_notes,
+                    assertion_notes=assertion_notes,
+                    evidence=behavior.evidence + coverage.evidence + [best_candidate.reason],
+                )
+            )
+        self.tracer.agent_done(agent_name, f"Found {len(behaviors)} behavior candidate(s) in {source_file}")
+        return planned
+
+    def write_fix_batch(
+        self,
+        items: Iterable[GapPlanItem],
+        failure_feedback: dict[str, str] | None = None,
+        attempt: int = 1,
+    ) -> list[WriteResult]:
+        feedback_by_gap = failure_feedback or {}
+        results: list[WriteResult] = []
+        for item in items:
             self.tracer.agent_start("TestDesignAgent", f"Designing fix for {item.source_file} -> {item.target_file}")
             if self.config.dry_run:
                 results.append(
@@ -162,6 +207,7 @@ class AgentRuntime:
                         gap_id=item.gap_id,
                         target_file=item.target_file,
                         status="dry-run",
+                        attempts=attempt,
                         verification_command=item.target_command,
                         notes=["Dry run enabled; no files changed."],
                     )
@@ -175,29 +221,96 @@ class AgentRuntime:
             if target_path.exists():
                 existing_test_snippet = self.source_reader.read(item.target_file)
 
-            self.tracer.agent_start("TestWriterAgent", f"Generating test patch for {item.target_file}")
-            test_code = self._generate_test_code(item, source_snippet, existing_test_snippet)
+            self.tracer.agent_start("TestWriterAgent", f"Generating test patch for {item.target_file} (attempt {attempt})")
+            test_code = self._generate_test_code(
+                item,
+                source_snippet,
+                existing_test_snippet,
+                failure_feedback=feedback_by_gap.get(item.gap_id),
+                attempt=attempt,
+            )
             self.patch_writer.write_test(item.target_file, test_code)
-            self.tracer.agent_done("TestWriterAgent", f"Wrote generated patch into {item.target_file}")
-            self.tracer.agent_start("VerificationAgent", f"Running verification for {item.target_file}")
-            verification_status, output = self.jest_runner.run(item.target_command)
             results.append(
                 WriteResult(
                     gap_id=item.gap_id,
                     target_file=item.target_file,
                     status="written",
+                    attempts=attempt,
                     verification_command=item.target_command,
-                    verification_status=verification_status,
-                    notes=[output[:1500]] if output else [],
+                    notes=[feedback_by_gap[item.gap_id]] if item.gap_id in feedback_by_gap else [],
                 )
             )
-            self.tracer.agent_done("VerificationAgent", f"{verification_status} for {item.target_file}")
-        self.tracer.agent_done("InteractiveSelectionAgent", f"Processed {len(results)} selected fix(es)")
+            self.tracer.agent_done("TestWriterAgent", f"Wrote generated patch into {item.target_file}")
         return results
 
-    def _generate_test_code(self, item: GapPlanItem, source_snippet: str, existing_test_snippet: str | None) -> str:
+    def verify_fix_batch(
+        self,
+        items: Iterable[GapPlanItem],
+        write_results: list[WriteResult],
+    ) -> tuple[list[WriteResult], list[str], dict[str, str]]:
+        item_by_id = {item.gap_id: item for item in items}
+        verified: list[WriteResult] = []
+        failed_gap_ids: list[str] = []
+        failure_feedback: dict[str, str] = {}
+
+        for result in write_results:
+            item = item_by_id[result.gap_id]
+            if result.status == "dry-run":
+                verified.append(result)
+                continue
+
+            self.tracer.agent_start("VerificationAgent", f"Running verification for {item.target_file}")
+            verification_status, output = self.jest_runner.run(item.target_command)
+            result.verification_status = verification_status
+            if output:
+                result.notes = [output[:1500]]
+            if verification_status != "passed":
+                failed_gap_ids.append(item.gap_id)
+                failure_feedback[item.gap_id] = output[:4000] if output else "Verification failed with no output."
+                result.status = "failed"
+            self.tracer.agent_done("VerificationAgent", f"{verification_status} for {item.target_file}")
+            verified.append(result)
+
+        return verified, failed_gap_ids, failure_feedback
+
+    def repair_failed_fixes(
+        self,
+        items: Iterable[GapPlanItem],
+        failure_feedback: dict[str, str],
+        attempt: int,
+    ) -> dict[str, str]:
+        item_by_id = {item.gap_id: item for item in items}
+        repaired_feedback: dict[str, str] = {}
+        for gap_id, raw_feedback in failure_feedback.items():
+            item = item_by_id.get(gap_id)
+            if item is None:
+                continue
+
+            self.tracer.agent_start("RepairAgent", f"Preparing repair guidance for {item.target_file} (attempt {attempt + 1})")
+            if self.llm.is_available():
+                summary = self.llm.summarize_verification_failure(item, raw_feedback, attempt)
+                repaired_feedback[gap_id] = summary or self._summarize_failure_feedback(raw_feedback)
+            else:
+                repaired_feedback[gap_id] = self._summarize_failure_feedback(raw_feedback)
+            self.tracer.agent_done("RepairAgent", f"Prepared repair guidance for {item.target_file}")
+        return repaired_feedback
+
+    def _generate_test_code(
+        self,
+        item: GapPlanItem,
+        source_snippet: str,
+        existing_test_snippet: str | None,
+        failure_feedback: str | None = None,
+        attempt: int = 1,
+    ) -> str:
         if self.llm.is_available():
-            generated = self.llm.generate_test_code(item, source_snippet, existing_test_snippet)
+            generated = self.llm.generate_test_code(
+                item,
+                source_snippet,
+                existing_test_snippet,
+                failure_feedback=failure_feedback,
+                attempt=attempt,
+            )
             if generated:
                 return generated
 
@@ -211,7 +324,40 @@ class AgentRuntime:
             f"}});"
         )
 
-    def _design_gap(self, source_file: str, behavior, candidate) -> tuple[str, str, str, list[str], list[str]]:
+    def _summarize_failure_feedback(self, raw_feedback: str) -> str:
+        lines = [line.strip() for line in raw_feedback.splitlines() if line.strip()]
+        priority_markers = (
+            "SyntaxError",
+            "ReferenceError",
+            "TypeError",
+            "Cannot find module",
+            "Expected:",
+            "Received:",
+            "Matcher error",
+            "thrown:",
+            "FAIL ",
+        )
+
+        selected: list[str] = []
+        for marker in priority_markers:
+            for line in lines:
+                if marker in line and line not in selected:
+                    selected.append(line)
+                if len(selected) >= 4:
+                    break
+            if len(selected) >= 4:
+                break
+
+        if not selected:
+            selected = lines[:4]
+
+        if not selected:
+            return "Verification failed, but no usable Jest output was captured. Recheck imports, mocks, async handling, and assertions."
+
+        summary = "; ".join(selected[:4])
+        return f"Revise the generated test to address this Jest failure: {summary}"
+
+    def _design_gap(self, source_file: str, behavior, candidate) -> tuple[str, str, str, str, list[str], list[str]]:
         route_context = self._route_context(source_file, behavior.line) if self._source_kind(source_file) == "route" else None
         setup_notes = [f"Target {candidate.suite_type} suite at {candidate.target_file}"]
         assertion_notes = [f"Assert behavior category `{behavior.category}` from line {behavior.line}"]
@@ -222,24 +368,43 @@ class AgentRuntime:
             middleware = route_context["middleware"]
             handler = route_context["handler"]
             route_label = f"{method} {path}"
+            case_type = self._case_type_for(source_file, behavior.category, route_context)
 
             if behavior.category == "express-route":
-                behavior_summary = f"{route_label} route wiring and middleware flow"
-                rationale = (
-                    f"The {route_label} route in {Path(source_file).name} appears uncovered, so we are not verifying "
-                    f"that it is wired through `{middleware}` into `{handler}`."
-                )
-                scenario = (
-                    f"exercise {route_label} through the real router and verify the request reaches `{handler}` "
-                    f"with the expected middleware chain `{middleware}`"
-                )
-                assertion_notes.extend(
-                    [
-                        f"Assert {route_label} is mounted and callable through the Express router",
-                        f"Assert middleware chain includes `{middleware}` before `{handler}`",
-                    ]
-                )
+                if case_type == "negative":
+                    behavior_summary = f"{route_label} protected route rejection path"
+                    rationale = (
+                        f"The protected {route_label} route in {Path(source_file).name} appears uncovered, so we are not verifying "
+                        f"that missing or insufficient auth is rejected before `{handler}` runs through `{middleware}`."
+                    )
+                    scenario = (
+                        f"exercise the negative path for {route_label} and verify unauthenticated or unauthorized requests are blocked "
+                        f"by `{middleware}` before `{handler}` executes"
+                    )
+                    assertion_notes.extend(
+                        [
+                            f"Assert {route_label} rejects unauthenticated or unauthorized requests",
+                            f"Assert `{handler}` is not reached when `{middleware}` blocks the request",
+                        ]
+                    )
+                else:
+                    behavior_summary = f"{route_label} route wiring and middleware flow"
+                    rationale = (
+                        f"The {route_label} route in {Path(source_file).name} appears uncovered, so we are not verifying "
+                        f"that it is wired through `{middleware}` into `{handler}`."
+                    )
+                    scenario = (
+                        f"exercise {route_label} through the real router and verify the request reaches `{handler}` "
+                        f"with the expected middleware chain `{middleware}`"
+                    )
+                    assertion_notes.extend(
+                        [
+                            f"Assert {route_label} is mounted and callable through the Express router",
+                            f"Assert middleware chain includes `{middleware}` before `{handler}`",
+                        ]
+                    )
             elif behavior.category == "error-path":
+                case_type = "negative"
                 behavior_summary = f"{route_label} inline auth/status response"
                 rationale = (
                     f"The {route_label} route in {Path(source_file).name} returns an inline status response, but there is "
@@ -256,17 +421,38 @@ class AgentRuntime:
                     ]
                 )
             else:
+                case_type = self._case_type_for(source_file, behavior.category, route_context)
                 behavior_summary = f"{route_label} {behavior.summary.lower()}"
                 rationale = f"The {route_label} route in {Path(source_file).name} appears {behavior.category}-sensitive and not directly covered."
                 scenario = f"cover the {route_label} route and assert the expected {behavior.category} behavior."
 
             setup_notes.append(f"Route context: `{route_label}` with `{middleware}` and handler `{handler}`")
-            return behavior_summary, rationale, scenario, setup_notes, assertion_notes
+            return case_type, behavior_summary, rationale, scenario, setup_notes, assertion_notes
 
+        case_type = self._case_type_for(source_file, behavior.category, route_context)
         behavior_summary = behavior.summary
-        rationale = f"{behavior.category} in {self._source_kind(source_file)} appears uncovered in {Path(source_file).name}."
-        scenario = f"covers {behavior.summary.lower()} in {Path(source_file).name}"
-        return behavior_summary, rationale, scenario, setup_notes, assertion_notes
+        if case_type == "negative":
+            rationale = f"{behavior.category} in {self._source_kind(source_file)} appears uncovered in {Path(source_file).name}, especially its rejection or failure-path behavior."
+            scenario = f"covers the negative path for {behavior.summary.lower()} in {Path(source_file).name}"
+        else:
+            rationale = f"{behavior.category} in {self._source_kind(source_file)} appears uncovered in {Path(source_file).name}."
+            scenario = f"covers {behavior.summary.lower()} in {Path(source_file).name}"
+        return case_type, behavior_summary, rationale, scenario, setup_notes, assertion_notes
+
+    def _case_type_for(self, source_file: str, category: str, route_context: dict[str, str] | None) -> str:
+        lowered = source_file.lower()
+        if category in {"error-path", "validation"}:
+            return "negative"
+        if route_context:
+            middleware = route_context.get("middleware", "")
+            path = route_context.get("path", "")
+            if middleware != "no middleware":
+                return "negative"
+            if ":" in path:
+                return "negative"
+        if any(token in lowered for token in ("auth", "middleware", "admin")):
+            return "negative"
+        return "positive"
 
     def _route_context(self, source_file: str, line_number: int) -> dict[str, str] | None:
         try:
