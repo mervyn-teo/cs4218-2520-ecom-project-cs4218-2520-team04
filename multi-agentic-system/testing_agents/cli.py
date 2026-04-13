@@ -25,7 +25,7 @@ except ImportError:  # pragma: no cover - fallback for plain python runs without
         return None
 
 from .agents import AgentRuntime
-from .config import RuntimeConfig
+from .config import RuntimeConfig, load_project_env
 from .graph import build_analyze_graph, build_write_graph
 from .interactive import color_priority, confirm_selection, format_gap_item, prompt_for_selection
 from .schemas import GapPlanItem
@@ -53,6 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def config_from_args(args: argparse.Namespace) -> RuntimeConfig:
     project_root = Path(__file__).resolve().parent.parent
+    load_project_env(project_root)
     artifact_dir = args.artifact_dir or project_root / "artifacts"
     os.environ.setdefault("UV_CACHE_DIR", str(project_root / ".uv-cache"))
     return RuntimeConfig(
@@ -85,6 +86,11 @@ def run_analyze(runtime: AgentRuntime, config: RuntimeConfig) -> int:
 
 def run_write(runtime: AgentRuntime, config: RuntimeConfig) -> int:
     runtime.health_check()
+    if not config.dry_run and not runtime.llm.is_available():
+        raise RuntimeError(
+            "OPENAI_API_KEY is not set. The write stage now fails fast instead of generating placeholder tests. "
+            "Set the key in your shell or in multi-agentic-system/.env and rerun."
+        )
     artifact_path = config.artifact_dir / "gap_plan.json"
     if not artifact_path.exists():
         print(f"{Fore.YELLOW}No gap_plan.json found, running analyze first.{Style.RESET_ALL}")
@@ -97,6 +103,7 @@ def run_write(runtime: AgentRuntime, config: RuntimeConfig) -> int:
         print(f"{Fore.YELLOW}Write cancelled.{Style.RESET_ALL}")
         return 0
 
+    runtime.reset_write_session()
     graph = build_write_graph(runtime)
     result = graph.invoke(
         {
@@ -113,15 +120,41 @@ def run_write(runtime: AgentRuntime, config: RuntimeConfig) -> int:
     write_results = result["write_results"]
     print(f"{Fore.GREEN}{Style.BRIGHT}Write complete:{Style.RESET_ALL} {len(write_results)} fixes processed.")
     for item in write_results:
-        status_color = Fore.GREEN if item.status in {"written", "dry-run"} else Fore.RED
-        verification = item.verification_status or "not-run"
-        verification_color = Fore.GREEN if verification == "passed" else Fore.YELLOW if verification == "not-run" else Fore.RED
-        print(
-            f"- {Fore.BLUE}{item.target_file}{Style.RESET_ALL}: "
-            f"{status_color}{item.status}{Style.RESET_ALL} "
-            f"({verification_color}{verification}{Style.RESET_ALL})"
-        )
+        print(_format_write_result(item, config))
     return 0
+
+
+def _format_write_result(item, config: RuntimeConfig) -> str:
+    verification = item.verification_status or "not-run"
+    verification_color = Fore.GREEN if verification == "passed" else Fore.YELLOW if verification == "not-run" else Fore.RED
+    status_color = Fore.GREEN if item.status in {"written", "dry-run"} else Fore.RED
+    retry_budget = max(1, config.write_retry_limit)
+    attempt_summary = f"attempt {item.attempts}/{retry_budget}"
+
+    if item.status == "dry-run":
+        headline = f"{status_color}dry-run{Style.RESET_ALL} ({verification_color}{verification}{Style.RESET_ALL})"
+    elif verification == "passed":
+        headline = f"{status_color}write succeeded{Style.RESET_ALL} ({verification_color}verification passed{Style.RESET_ALL}, {attempt_summary})"
+    elif verification == "failed":
+        if item.attempts >= retry_budget and not config.dry_run:
+            headline = (
+                f"{Fore.RED}write succeeded but verification failed after max retries{Style.RESET_ALL} "
+                f"({verification_color}{attempt_summary}{Style.RESET_ALL})"
+            )
+        else:
+            headline = (
+                f"{Fore.RED}write succeeded but verification failed{Style.RESET_ALL} "
+                f"({verification_color}{attempt_summary}{Style.RESET_ALL})"
+            )
+    else:
+        headline = f"{status_color}{item.status}{Style.RESET_ALL} ({verification_color}{verification}{Style.RESET_ALL}, {attempt_summary})"
+
+    lines = [f"- {Fore.BLUE}{item.target_file}{Style.RESET_ALL}: {headline}"]
+    if item.notes:
+        detail = " ".join(part.strip() for part in item.notes if part.strip())
+        if detail:
+            lines.append(f"  {Fore.YELLOW}note:{Style.RESET_ALL} {detail}")
+    return "\n".join(lines)
 
 
 def main(argv: list[str] | None = None) -> int:
